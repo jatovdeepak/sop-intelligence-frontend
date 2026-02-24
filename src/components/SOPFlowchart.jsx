@@ -34,15 +34,20 @@ import { twMerge } from 'tailwind-merge';
 import structureData from './structure.json';
 import 'reactflow/dist/style.css';
 
-// Context to share the active filter state and direction with custom nodes
-export const FlowContext = createContext({ activeLens: 'All', direction: 'TB' });
+// Context to share the active filter state, layout direction, and action handlers
+export const FlowContext = createContext({ 
+  activeLens: 'All', 
+  direction: 'TB',
+  toggleNode: (id) => {},
+  showMore: (id) => {}
+});
 
 // Helper for conditional classes
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-// Role Color Mapping Configuration (From your reference)
+// Role Color Mapping Configuration
 const roleColors = {
   'Technician - Eng': 'bg-blue-50 text-blue-700 border-blue-200',
   'Executive - Eng': 'bg-purple-50 text-purple-700 border-purple-200',
@@ -144,6 +149,8 @@ function generateFlowData(jsonData) {
     data: {
       label: 'Tablet Compression PM',
       sublabel: 'SOP: GFMN032',
+      isExpanded: false, // <-- CHANGED: Root starts fully collapsed
+      visibleLimit: 3,  
       details: {
         title: 'Preventive Maintenance of Tablet Compression Machine',
         owner: 'Engineering & QA',
@@ -172,6 +179,8 @@ function generateFlowData(jsonData) {
           sublabel: shortContent,
           roles: determineRoles(item),
           isDimmed: false,
+          isExpanded: false, 
+          visibleLimit: 3,   
           details: {
             title: cleanTitle,
             description: cleanContent || `Refer to section ${item.id} documentation.`,
@@ -185,7 +194,7 @@ function generateFlowData(jsonData) {
         id: `e-${parentId}-${item.id}`,
         source: parentId,
         target: item.id,
-        type: 'default', // Creates smooth curved edges (bezier curves)
+        type: 'default', 
         animated: depth === 1,
         style: { stroke: '#94a3b8', strokeWidth: 1.5 }
       });
@@ -200,15 +209,19 @@ function generateFlowData(jsonData) {
   return { rawNodes: nodes, rawEdges: edges };
 }
 
-const enrichNodeData = (nodes, edges, activeLens = 'All') => {
-  let validNodeIds = new Set(nodes.map(n => n.id)); 
-  
+// ----------------------------------------------------------------------------
+// CENTRALIZED TOP-DOWN VISIBILITY ENGINE
+// ----------------------------------------------------------------------------
+const applyVisibility = (nodes, edges, activeLens) => {
+  let validNodeIds = new Set(nodes.map(n => n.id));
+  let targetNodeIds = new Set(nodes.map(n => n.id));
+
   if (activeLens !== 'All') {
-    const targetNodeIds = new Set();
+    targetNodeIds = new Set();
     nodes.forEach(n => {
       if (n.data.roles && n.data.roles.includes(activeLens)) targetNodeIds.add(n.id);
     });
-    
+
     const ancestors = new Set();
     const traceAncestors = (nodeId) => {
       const incoming = edges.filter(e => e.target === nodeId);
@@ -221,22 +234,44 @@ const enrichNodeData = (nodes, edges, activeLens = 'All') => {
     validNodeIds = new Set([...targetNodeIds, ...ancestors]);
   }
 
-  return nodes.map(node => {
-    const childEdges = edges.filter((edge) => edge.source === node.id);
-    const validChildIds = childEdges.map(e => e.target).filter(id => validNodeIds.has(id));
+  const visibleNodeIds = new Set(['root']);
+  const getChildren = (id) => edges.filter(e => e.source === id).map(e => e.target);
+  
+  const nextNodes = nodes.map(n => ({ ...n, data: { ...n.data } }));
+
+  const traverse = (nodeId) => {
+    if (!visibleNodeIds.has(nodeId)) return;
     
-    const hasChildren = validChildIds.length > 0;
-    const visibleChildren = nodes.filter((n) => validChildIds.includes(n.id) && !n.hidden);
-    
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        hasChildren,
-        isExpanded: visibleChildren.length > 0
-      }
-    };
-  });
+    const node = nextNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const isTarget = activeLens === 'All' || targetNodeIds.has(nodeId);
+    node.data.isDimmed = !isTarget;
+
+    if (!node.data.isExpanded) return;
+
+    const validChildren = getChildren(nodeId).filter(id => validNodeIds.has(id));
+    const limit = node.data.visibleLimit || 3;
+    const childrenToShow = validChildren.slice(0, limit);
+
+    childrenToShow.forEach(childId => {
+      visibleNodeIds.add(childId);
+      traverse(childId); 
+    });
+
+    node.data.hiddenChildrenCount = validChildren.length - childrenToShow.length;
+  };
+
+  traverse('root');
+
+  return nextNodes.map(node => ({
+    ...node,
+    hidden: !visibleNodeIds.has(node.id),
+    data: {
+      ...node.data,
+      hasChildren: getChildren(node.id).filter(id => validNodeIds.has(id)).length > 0,
+    }
+  }));
 };
 
 // ============================================================================
@@ -292,80 +327,12 @@ const HoverTooltip = ({ details, isHorizontal }) => (
   </div>
 );
 
-const useNodeToggle = (id) => {
-  const { activeLens, direction } = useContext(FlowContext); 
-  const { getEdges, getNodes, setNodes, fitView } = useReactFlow();
-
-  const handleToggle = useCallback(() => {
-    const edges = getEdges();
-    const nodes = getNodes();
-    const childEdges = edges.filter((edge) => edge.source === id);
-    const childNodeIds = childEdges.map((edge) => edge.target);
-    
-    const isCurrentlyExpanded = nodes.some(n => childNodeIds.includes(n.id) && !n.hidden);
-    
-    let updatedNodes;
-
-    if (isCurrentlyExpanded) {
-      const allDescendants = new Set();
-      const getDescendants = (nodeId) => {
-          const cEdges = edges.filter(e => e.source === nodeId);
-          cEdges.forEach(e => {
-              allDescendants.add(e.target);
-              getDescendants(e.target);
-          });
-      };
-      getDescendants(id);
-
-      updatedNodes = nodes.map((node) => {
-          if (allDescendants.has(node.id)) return { ...node, hidden: true };
-          return node;
-      });
-    } else {
-      let validChildIds = childNodeIds;
-      
-      if (activeLens !== 'All') {
-        const targetNodeIds = new Set();
-        nodes.forEach(n => {
-          if (n.data.roles && n.data.roles.includes(activeLens)) targetNodeIds.add(n.id);
-        });
-
-        const ancestorsToUnhide = new Set();
-        const traceAncestors = (nodeId) => {
-          const incomingEdges = edges.filter(e => e.target === nodeId);
-          incomingEdges.forEach(edge => {
-            ancestorsToUnhide.add(edge.source);
-            traceAncestors(edge.source);
-          });
-        };
-        targetNodeIds.forEach(tId => traceAncestors(tId));
-        
-        validChildIds = childNodeIds.filter(cId => targetNodeIds.has(cId) || ancestorsToUnhide.has(cId));
-      }
-
-      updatedNodes = nodes.map((node) => {
-        if (validChildIds.includes(node.id)) return { ...node, hidden: false };
-        return node;
-      });
-    }
-    
-    let nextNodes = enrichNodeData(updatedNodes, edges, activeLens);
-    const { nodes: layoutedNodes } = getLayoutedElements(nextNodes, edges, direction);
-    setNodes(layoutedNodes);
-    
-    setTimeout(() => { fitView({ duration: 600, padding: 0.2, maxZoom: 1 }); }, 50);
-  }, [id, activeLens, direction, getEdges, getNodes, setNodes, fitView]);
-
-  return handleToggle;
-};
-
 // ============================================================================
 // 5. CUSTOM NODE COMPONENTS
 // ============================================================================
 
 const MainNode = ({ id, data }) => {
-  const handleToggle = useNodeToggle(id);
-  const { direction } = useContext(FlowContext);
+  const { direction, toggleNode, showMore } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
@@ -382,7 +349,7 @@ const MainNode = ({ id, data }) => {
         <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0 pointer-events-none" />
         
         {data.hasChildren && (
-          <ExpandCollapseButton expanded={data.isExpanded} onClick={handleToggle} isHorizontal={isHorizontal} />
+          <ExpandCollapseButton expanded={data.isExpanded} onClick={() => toggleNode(id)} isHorizontal={isHorizontal} />
         )}
 
         <div className="flex items-start justify-between mb-3">
@@ -398,6 +365,16 @@ const MainNode = ({ id, data }) => {
           <h3 className="font-bold text-lg leading-tight mb-1">{data.label}</h3>
           <p className="text-blue-100 text-sm font-medium opacity-90">{data.sublabel}</p>
         </div>
+
+        {data.isExpanded && data.hiddenChildrenCount > 0 && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); showMore(id); }}
+            className="mt-4 w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white bg-blue-500/50 hover:bg-blue-500 rounded-lg transition-colors border border-blue-400"
+          >
+            <Plus size={12} strokeWidth={3} />
+            Show {data.hiddenChildrenCount} More
+          </button>
+        )}
       </div>
       
       {isHovered && <HoverTooltip details={data.details} isHorizontal={isHorizontal} />}
@@ -406,8 +383,7 @@ const MainNode = ({ id, data }) => {
 };
 
 const StepNode = ({ id, data }) => {
-  const handleToggle = useNodeToggle(id);
-  const { direction } = useContext(FlowContext);
+  const { direction, toggleNode, showMore } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
@@ -430,7 +406,7 @@ const StepNode = ({ id, data }) => {
         <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0" />
         
         {data.hasChildren && (
-          <ExpandCollapseButton expanded={data.isExpanded} onClick={handleToggle} isHorizontal={isHorizontal} />
+          <ExpandCollapseButton expanded={data.isExpanded} onClick={() => toggleNode(id)} isHorizontal={isHorizontal} />
         )}
 
         <div className="flex justify-between items-start mb-2">
@@ -469,6 +445,16 @@ const StepNode = ({ id, data }) => {
               <span>→</span>
            </div>
         </div>
+
+        {data.isExpanded && data.hiddenChildrenCount > 0 && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); showMore(id); }}
+            className="mt-3 w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100"
+          >
+            <Plus size={12} strokeWidth={3} />
+            Show {data.hiddenChildrenCount} More
+          </button>
+        )}
       </div>
       
       {isHovered && <HoverTooltip details={data.details} isHorizontal={isHorizontal} />}
@@ -488,84 +474,125 @@ const nodeTypes = {
 function FlowchartInstance() {
   const { rawNodes, rawEdges } = useMemo(() => generateFlowData(structureData), []);
   const [activeLens, setActiveLens] = useState('All');
-  const [layoutDirection, setLayoutDirection] = useState('TB'); // Top-Down default or LR
+  const [layoutDirection, setLayoutDirection] = useState('TB'); 
 
   const { nodes: initialLayoutNodes, edges: initialLayoutEdges } = useMemo(() => {
-    const enriched = enrichNodeData(rawNodes, rawEdges, 'All');
-    return getLayoutedElements(enriched, rawEdges, layoutDirection);
-  }, [rawNodes, rawEdges, layoutDirection]);
+    const enriched = applyVisibility(rawNodes, rawEdges, 'All');
+    return getLayoutedElements(enriched, rawEdges, 'TB');
+  }, [rawNodes, rawEdges]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialLayoutNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialLayoutEdges);
 
-  const { getEdges, fitView } = useReactFlow();
+  const { getEdges, fitView, setCenter } = useReactFlow();
 
   useEffect(() => {
-    const currentEdges = getEdges();
-    setNodes((currentNodes) => {
-      let nextNodes = [...currentNodes];
-
-      const targetNodeIds = new Set();
-      if (activeLens !== 'All') {
-        nextNodes.forEach(n => {
-          if (n.data.roles && n.data.roles.includes(activeLens)) targetNodeIds.add(n.id);
-        });
-      }
-
-      nextNodes = nextNodes.map(node => {
-        const isTarget = activeLens === 'All' || targetNodeIds.has(node.id);
-        
-        if (node.id === 'root') {
-          return { ...node, hidden: false, data: { ...node.data, isDimmed: !isTarget } };
-        }
-
-        return { 
-          ...node, 
-          hidden: true, 
-          data: { ...node.data, isDimmed: !isTarget } 
-        };
-      });
-
-      nextNodes = enrichNodeData(nextNodes, currentEdges, activeLens);
-      const { nodes: layoutedNodes } = getLayoutedElements(nextNodes, currentEdges, layoutDirection);
+    setNodes(nds => {
+      const updated = applyVisibility(nds, getEdges(), activeLens);
+      const { nodes: layoutedNodes } = getLayoutedElements(updated, getEdges(), layoutDirection);
       return layoutedNodes;
     });
-    
-    setTimeout(() => { fitView({ duration: 600, padding: 0.2, maxZoom: 1 }); }, 50);
+    setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
   }, [activeLens, layoutDirection, getEdges, setNodes, fitView]);
+
+  // TOGGLE NODE EXPANSION - IMPROVED ZOOM LOGIC
+  const toggleNode = useCallback((id) => {
+    const currentEdges = getEdges();
+    setNodes(nds => {
+      const nextNodes = nds.map(n => {
+        if (n.id === id) {
+          const isExpanding = !n.data.isExpanded;
+          return {
+            ...n,
+            data: { 
+              ...n.data, 
+              isExpanded: isExpanding,
+              visibleLimit: isExpanding ? 3 : n.data.visibleLimit 
+            }
+          };
+        }
+        return n;
+      });
+      const updated = applyVisibility(nextNodes, currentEdges, activeLens);
+      const { nodes: layoutedNodes } = getLayoutedElements(updated, currentEdges, layoutDirection);
+      
+      const targetNode = layoutedNodes.find(n => n.id === id);
+      if (targetNode) {
+        setTimeout(() => {
+          const isExpanded = targetNode.data.isExpanded;
+          
+          // Center exactly on node
+          let focusX = targetNode.position.x + 150; 
+          let focusY = targetNode.position.y + 90;
+
+          // If expanding, shift the camera focus towards the new children and ZOOM OUT
+          if (isExpanded) {
+            if (layoutDirection === 'TB') {
+              focusY += 160; // Shift down slightly
+            } else {
+              focusX += 220; // Shift right slightly
+            }
+          }
+
+          setCenter(focusX, focusY, { 
+            zoom: isExpanded ? 0.75 : 1, // <-- Zoom out to 0.75x to see children
+            duration: 800 
+          });
+        }, 50);
+      }
+      
+      return layoutedNodes;
+    });
+  }, [getEdges, setNodes, setCenter, activeLens, layoutDirection]);
+
+  // PAGINATION - SHOW MORE - IMPROVED ZOOM LOGIC
+  const showMore = useCallback((id) => {
+    const currentEdges = getEdges();
+    setNodes(nds => {
+      const nextNodes = nds.map(n => {
+        if (n.id === id) {
+          return {
+            ...n,
+            data: { ...n.data, visibleLimit: (n.data.visibleLimit || 3) + 3 } 
+          };
+        }
+        return n;
+      });
+      const updated = applyVisibility(nextNodes, currentEdges, activeLens);
+      const { nodes: layoutedNodes } = getLayoutedElements(updated, currentEdges, layoutDirection);
+      
+      const targetNode = layoutedNodes.find(n => n.id === id);
+      if (targetNode) {
+        setTimeout(() => {
+          let focusX = targetNode.position.x + 150; 
+          let focusY = targetNode.position.y + 90;
+
+          if (layoutDirection === 'TB') {
+            focusY += 160; 
+          } else {
+            focusX += 220; 
+          }
+
+          setCenter(focusX, focusY, { 
+            zoom: 0.75, // <-- Keeps it zoomed out to show the extra nodes
+            duration: 800 
+          });
+        }, 50);
+      }
+
+      return layoutedNodes;
+    });
+  }, [getEdges, setNodes, setCenter, activeLens, layoutDirection]);
 
   const handleExpandAll = useCallback(() => {
     const currentEdges = getEdges();
     setNodes(nds => {
-      let nextNodes;
-      
-      if (activeLens === 'All') {
-        nextNodes = nds.map(n => ({ ...n, hidden: false }));
-      } else {
-        const targetNodeIds = new Set();
-        nds.forEach(n => {
-          if (n.data.roles && n.data.roles.includes(activeLens)) targetNodeIds.add(n.id);
-        });
-
-        const ancestorsToUnhide = new Set();
-        const traceAncestors = (nodeId) => {
-          const incomingEdges = currentEdges.filter(e => e.target === nodeId);
-          incomingEdges.forEach(edge => {
-            ancestorsToUnhide.add(edge.source);
-            traceAncestors(edge.source);
-          });
-        };
-        targetNodeIds.forEach(id => traceAncestors(id));
-
-        nextNodes = nds.map(n => {
-          if (n.id === 'root') return { ...n, hidden: false };
-          const isVisible = targetNodeIds.has(n.id) || ancestorsToUnhide.has(n.id);
-          return { ...n, hidden: !isVisible };
-        });
-      }
-
-      const enriched = enrichNodeData(nextNodes, currentEdges, activeLens);
-      const { nodes: layouted } = getLayoutedElements(enriched, currentEdges, layoutDirection);
+      const nextNodes = nds.map(n => ({ 
+        ...n, 
+        data: { ...n.data, isExpanded: true, visibleLimit: 9999 } 
+      }));
+      const updated = applyVisibility(nextNodes, currentEdges, activeLens);
+      const { nodes: layouted } = getLayoutedElements(updated, currentEdges, layoutDirection);
       return layouted;
     });
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
@@ -576,27 +603,23 @@ function FlowchartInstance() {
     setNodes(nds => {
       const nextNodes = nds.map(n => ({
         ...n,
-        hidden: n.id !== 'root' 
+        data: { ...n.data, isExpanded: false }
       }));
-      const enriched = enrichNodeData(nextNodes, currentEdges, activeLens);
-      const { nodes: layouted } = getLayoutedElements(enriched, currentEdges, layoutDirection);
+      const updated = applyVisibility(nextNodes, currentEdges, activeLens);
+      const { nodes: layouted } = getLayoutedElements(updated, currentEdges, layoutDirection);
       return layouted;
     });
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
   }, [getEdges, setNodes, fitView, activeLens, layoutDirection]);
 
   const lensOptions = [
-    'All', 
-    'Technician - Eng', 
-    'Executive - Eng', 
-    'Head - Eng', 
-    'IPQA'
+    'All', 'Technician - Eng', 'Executive - Eng', 'Head - Eng', 'IPQA'
   ];
 
   return (
     <div className="w-full h-full bg-slate-50 relative flex font-sans overflow-hidden">
       
-      <FlowContext.Provider value={{ activeLens, direction: layoutDirection }}>
+      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, toggleNode, showMore }}>
         <div className="flex-1 h-full p-6">
           <ReactFlow
             nodes={nodes}
@@ -614,7 +637,7 @@ function FlowchartInstance() {
             panOnDrag={true}
             zoomOnScroll={false}
             defaultEdgeOptions={{
-              type: 'default', // Ensures standard curved bezier lines
+              type: 'default',
               markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
               style: { stroke: '#94a3b8', strokeWidth: 1.5 },
             }}
@@ -629,14 +652,12 @@ function FlowchartInstance() {
         </div>
       </FlowContext.Provider>
 
-      {/* FILTER & CONTROLS OVERLAY (TOP CENTER) */}
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
         <div className="bg-white/90 backdrop-blur-md p-2 rounded-2xl border border-slate-200 shadow-sm pointer-events-auto flex items-center gap-2 flex-wrap w-max">
            <div className="px-2 text-slate-400 shrink-0">
              <Filter size={16} />
            </div>
            
-           {/* Your Exact Original Filters */}
            <div className="flex gap-1.5 flex-wrap">
              {lensOptions.map(role => (
                <button
@@ -655,29 +676,28 @@ function FlowchartInstance() {
            </div>
 
            <div className="flex items-center gap-1.5 ml-2 pl-3 border-l border-slate-200">
-              {/* New Layout Toggle */}
-              <button 
-                onClick={() => setLayoutDirection(prev => prev === 'LR' ? 'TB' : 'LR')}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors shadow-sm mr-2"
-              >
-                <LayoutTemplate size={14} className={layoutDirection === 'LR' ? "rotate-90" : ""} />
-                {layoutDirection === 'LR' ? 'Left to Right' : 'Top Down'}
-              </button>
+             <button 
+               onClick={() => setLayoutDirection(prev => prev === 'LR' ? 'TB' : 'LR')}
+               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors shadow-sm mr-2"
+             >
+               <LayoutTemplate size={14} className={layoutDirection === 'LR' ? "rotate-90" : ""} />
+               {layoutDirection === 'LR' ? 'Left to Right' : 'Top Down'}
+             </button>
 
-              <button 
-                onClick={handleExpandAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors shadow-sm"
-              >
-                <ChevronsDown size={14} />
-                Expand All
-              </button>
-              <button 
-                onClick={handleCollapseAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-800 transition-colors shadow-sm"
-              >
-                <ChevronsUp size={14} />
-                Collapse All
-              </button>
+             <button 
+               onClick={handleExpandAll}
+               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors shadow-sm"
+             >
+               <ChevronsDown size={14} />
+               Expand All
+             </button>
+             <button 
+               onClick={handleCollapseAll}
+               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-800 transition-colors shadow-sm"
+             >
+               <ChevronsUp size={14} />
+               Collapse All
+             </button>
            </div>
         </div>
       </div>
@@ -685,15 +705,10 @@ function FlowchartInstance() {
   );
 }
 
-// Added `sop` and `onClose` props to the main export
 export default function SOPFlowchart({ sop, onClose }) {
   return (
     <div className="relative w-full max-w-[95vw] h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden pointer-events-auto">
-      
-      {/* Updated Modal Header for Flowchart */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white z-20 shrink-0">
-        
-        {/* Title Container Integrated from the Prompt */}
         <div className="flex items-center gap-4">
           <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-blue-200 shadow-lg shrink-0">
             <Share2 size={20} />
@@ -716,13 +731,11 @@ export default function SOPFlowchart({ sop, onClose }) {
         </button>
       </div>
       
-      {/* Flowchart Content */}
       <div className="flex-1 w-full bg-slate-50 relative overflow-hidden">
         <ReactFlowProvider>
           <FlowchartInstance />
         </ReactFlowProvider>
       </div>
-      
     </div>
   );
 }

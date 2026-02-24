@@ -25,7 +25,8 @@ import {
   ChevronsDown,
   ChevronsUp,
   X,
-  LayoutTemplate
+  LayoutTemplate,
+  Info
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -186,6 +187,9 @@ function generateFlowData(jsonData) {
             description: cleanContent || `Refer to section ${item.id} documentation.`,
             action: item.children && item.children.length > 0 ? 'Expand for steps' : 'Execute Step',
             criticality: item.id.startsWith('5.') ? 'High' : 'Normal',
+            owner: 'Tech Team', 
+            updated: '2025-11-16', 
+            documents: 'CAL-FORM-001' 
           }
         },
       });
@@ -295,40 +299,56 @@ const ExpandCollapseButton = ({ expanded, onClick, isHorizontal }) => (
   </button>
 );
 
-const HoverTooltip = ({ details, isHorizontal }) => (
+// FULLY REDESIGNED HOVER TOOLTIP (Always on the right)
+const HoverTooltip = ({ details }) => (
   <div className={cn(
-    "absolute z-[100] w-80 bg-white rounded-xl shadow-2xl shadow-slate-300/50 border border-slate-100 p-5 pointer-events-none animate-in fade-in zoom-in duration-200",
-    isHorizontal ? "left-[105%] top-0" : "left-1/2 -translate-x-1/2 top-[105%]"
+    "absolute w-96 bg-white rounded-2xl shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 p-5 pointer-events-none z-[100000]",
+    // Aligns to the right of the node in ALL views and vertically centers it
+    "left-[calc(100%+24px)] top-1/2 -translate-y-1/2",
+    "animate-in fade-in zoom-in-95 duration-200 ease-out"
   )}>
-    <div className="flex items-start gap-3 mb-3">
-      <div className="p-1.5 bg-blue-50 rounded-lg text-blue-600 shrink-0 mt-0.5">
-         <CheckCircle2 size={18} />
+    <div className="relative z-10 flex flex-col">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-[10px] flex items-center justify-center text-white mt-1 shadow-sm">
+          <Info size={22} strokeWidth={2.5} />
+        </div>
+        
+        <div className="flex flex-col pt-0.5">
+          <h4 className="font-semibold text-slate-900 text-[17px] leading-tight mb-1.5">{details.title}</h4>
+          <p className="text-slate-500 text-[13px] leading-relaxed line-clamp-3">{details.description}</p>
+        </div>
       </div>
-      <div>
-        <h4 className="font-bold text-slate-800 text-sm leading-tight mb-1">{details.title}</h4>
-        <p className="text-slate-500 text-xs leading-relaxed line-clamp-3">{details.description}</p>
+      
+      <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col gap-3">
+        {details.owner && (
+          <div className="flex items-center text-[13px]">
+            <span className="w-24 text-slate-500 font-medium">Owner:</span>
+            <span className="text-slate-700">{details.owner}</span>
+          </div>
+        )}
+        
+        {details.updated && (
+          <div className="flex items-center text-[13px]">
+            <span className="w-24 text-slate-500 font-medium">Updated:</span>
+            <span className="text-slate-700">{details.updated}</span>
+          </div>
+        )}
+        
+        {(details.documents || details.docId) && (
+          <div className="flex items-center text-[13px]">
+            <span className="w-24 text-slate-500 font-medium">Documents:</span>
+            <span className="bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md text-xs font-semibold">
+              {details.documents || details.docId}
+            </span>
+          </div>
+        )}
       </div>
-    </div>
-    
-    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 mt-3">
-       {details.owner && (
-         <div className="flex text-xs items-center gap-1.5 text-slate-600">
-           <User size={12} className="text-slate-400" /> 
-           <span className="truncate">{details.owner}</span>
-         </div>
-       )}
-       {details.updated && (
-         <div className="flex text-xs items-center gap-1.5 text-slate-600">
-           <Calendar size={12} className="text-slate-400" /> 
-           <span>{details.updated}</span>
-         </div>
-       )}
     </div>
   </div>
 );
 
 // ============================================================================
-// 5. CUSTOM NODE COMPONENTS
+// 5. CUSTOM NODE COMPONENTS 
 // ============================================================================
 
 const MainNode = ({ id, data }) => {
@@ -336,11 +356,24 @@ const MainNode = ({ id, data }) => {
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
+  // Z-index dynamic elevation fix
+  const handleMouseEnter = (e) => {
+    setIsHovered(true);
+    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
+    if (nodeWrapper) nodeWrapper.style.zIndex = '99999';
+  };
+
+  const handleMouseLeave = (e) => {
+    setIsHovered(false);
+    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
+    if (nodeWrapper) nodeWrapper.style.zIndex = '';
+  };
+
   return (
     <div 
-      onMouseEnter={() => setIsHovered(true)} 
-      onMouseLeave={() => setIsHovered(false)}
-      className="relative z-10"
+      onMouseEnter={handleMouseEnter} 
+      onMouseLeave={handleMouseLeave}
+      className="relative transition-all duration-200 z-10"
     >
       <div className={cn(
         "w-72 p-4 rounded-xl shadow-lg transition-all duration-300 bg-blue-600 text-white border border-blue-500",
@@ -377,7 +410,7 @@ const MainNode = ({ id, data }) => {
         )}
       </div>
       
-      {isHovered && <HoverTooltip details={data.details} isHorizontal={isHorizontal} />}
+      {isHovered && <HoverTooltip details={data.details} />}
     </div>
   );
 };
@@ -390,11 +423,24 @@ const StepNode = ({ id, data }) => {
   const primaryRole = data.roles && data.roles.length > 0 ? data.roles[0] : null;
   const topBorderColor = primaryRole ? roleBorderColors[primaryRole] : 'border-t-slate-300';
 
+  // Z-index dynamic elevation fix
+  const handleMouseEnter = (e) => {
+    setIsHovered(true);
+    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
+    if (nodeWrapper) nodeWrapper.style.zIndex = '99999';
+  };
+
+  const handleMouseLeave = (e) => {
+    setIsHovered(false);
+    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
+    if (nodeWrapper) nodeWrapper.style.zIndex = '';
+  };
+
   return (
     <div 
-      onMouseEnter={() => setIsHovered(true)} 
-      onMouseLeave={() => setIsHovered(false)}
-      className="relative z-10"
+      onMouseEnter={handleMouseEnter} 
+      onMouseLeave={handleMouseLeave}
+      className="relative transition-all duration-200 z-10"
     >
       <div className={cn(
         "w-72 p-4 rounded-xl shadow-sm border-x border-b border-t-4 transition-all duration-300 bg-white",
@@ -457,7 +503,7 @@ const StepNode = ({ id, data }) => {
         )}
       </div>
       
-      {isHovered && <HoverTooltip details={data.details} isHorizontal={isHorizontal} />}
+      {isHovered && <HoverTooltip details={data.details} />}
     </div>
   );
 };
@@ -486,19 +532,17 @@ function FlowchartInstance() {
 
   const { getEdges, fitView, setCenter } = useReactFlow();
 
-  // FILTER CHANGE HANDLER (Strict Reset)
   const handleLensChange = useCallback((role) => {
     setActiveLens(role);
     const currentEdges = getEdges();
     
     setNodes(nds => {
-      // Force collapse all back to root node immediately when clicked
       const nextNodes = nds.map(n => ({
         ...n,
         data: { 
           ...n.data, 
-          isExpanded: false, // Close everything
-          visibleLimit: 3    // Reset limits
+          isExpanded: false, 
+          visibleLimit: 3    
         }
       }));
       const updated = applyVisibility(nextNodes, currentEdges, role);
@@ -506,11 +550,9 @@ function FlowchartInstance() {
       return layouted;
     });
     
-    // Smoothly pan camera back to root
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
   }, [getEdges, setNodes, fitView, layoutDirection]);
 
-  // DIRECTION CHANGE HANDLER
   const handleDirectionChange = useCallback(() => {
     setLayoutDirection(prev => {
       const nextDir = prev === 'LR' ? 'TB' : 'LR';
@@ -525,7 +567,6 @@ function FlowchartInstance() {
     });
   }, [getEdges, setNodes, fitView, activeLens]);
 
-  // TOGGLE NODE EXPANSION
   const toggleNode = useCallback((id) => {
     const currentEdges = getEdges();
     setNodes(nds => {
@@ -573,7 +614,6 @@ function FlowchartInstance() {
     });
   }, [getEdges, setNodes, setCenter, activeLens, layoutDirection]);
 
-  // PAGINATION - SHOW MORE
   const showMore = useCallback((id) => {
     const currentEdges = getEdges();
     setNodes(nds => {

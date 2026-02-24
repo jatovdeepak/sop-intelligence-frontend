@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo, createContext, useContext } from 'react';
+import React, { useCallback, useState, useMemo, createContext, useContext } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -149,7 +149,7 @@ function generateFlowData(jsonData) {
     data: {
       label: 'Tablet Compression PM',
       sublabel: 'SOP: GFMN032',
-      isExpanded: false, // <-- CHANGED: Root starts fully collapsed
+      isExpanded: false, 
       visibleLimit: 3,  
       details: {
         title: 'Preventive Maintenance of Tablet Compression Machine',
@@ -486,16 +486,46 @@ function FlowchartInstance() {
 
   const { getEdges, fitView, setCenter } = useReactFlow();
 
-  useEffect(() => {
+  // FILTER CHANGE HANDLER (Strict Reset)
+  const handleLensChange = useCallback((role) => {
+    setActiveLens(role);
+    const currentEdges = getEdges();
+    
     setNodes(nds => {
-      const updated = applyVisibility(nds, getEdges(), activeLens);
-      const { nodes: layoutedNodes } = getLayoutedElements(updated, getEdges(), layoutDirection);
-      return layoutedNodes;
+      // Force collapse all back to root node immediately when clicked
+      const nextNodes = nds.map(n => ({
+        ...n,
+        data: { 
+          ...n.data, 
+          isExpanded: false, // Close everything
+          visibleLimit: 3    // Reset limits
+        }
+      }));
+      const updated = applyVisibility(nextNodes, currentEdges, role);
+      const { nodes: layouted } = getLayoutedElements(updated, currentEdges, layoutDirection);
+      return layouted;
     });
+    
+    // Smoothly pan camera back to root
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
-  }, [activeLens, layoutDirection, getEdges, setNodes, fitView]);
+  }, [getEdges, setNodes, fitView, layoutDirection]);
 
-  // TOGGLE NODE EXPANSION - IMPROVED ZOOM LOGIC
+  // DIRECTION CHANGE HANDLER
+  const handleDirectionChange = useCallback(() => {
+    setLayoutDirection(prev => {
+      const nextDir = prev === 'LR' ? 'TB' : 'LR';
+      const currentEdges = getEdges();
+      setNodes(nds => {
+        const updated = applyVisibility(nds, currentEdges, activeLens);
+        const { nodes: layouted } = getLayoutedElements(updated, currentEdges, nextDir);
+        return layouted;
+      });
+      setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
+      return nextDir;
+    });
+  }, [getEdges, setNodes, fitView, activeLens]);
+
+  // TOGGLE NODE EXPANSION
   const toggleNode = useCallback((id) => {
     const currentEdges = getEdges();
     setNodes(nds => {
@@ -521,21 +551,19 @@ function FlowchartInstance() {
         setTimeout(() => {
           const isExpanded = targetNode.data.isExpanded;
           
-          // Center exactly on node
           let focusX = targetNode.position.x + 150; 
           let focusY = targetNode.position.y + 90;
 
-          // If expanding, shift the camera focus towards the new children and ZOOM OUT
           if (isExpanded) {
             if (layoutDirection === 'TB') {
-              focusY += 160; // Shift down slightly
+              focusY += 160; 
             } else {
-              focusX += 220; // Shift right slightly
+              focusX += 220; 
             }
           }
 
           setCenter(focusX, focusY, { 
-            zoom: isExpanded ? 0.75 : 1, // <-- Zoom out to 0.75x to see children
+            zoom: isExpanded ? 0.75 : 1,
             duration: 800 
           });
         }, 50);
@@ -545,7 +573,7 @@ function FlowchartInstance() {
     });
   }, [getEdges, setNodes, setCenter, activeLens, layoutDirection]);
 
-  // PAGINATION - SHOW MORE - IMPROVED ZOOM LOGIC
+  // PAGINATION - SHOW MORE
   const showMore = useCallback((id) => {
     const currentEdges = getEdges();
     setNodes(nds => {
@@ -574,7 +602,7 @@ function FlowchartInstance() {
           }
 
           setCenter(focusX, focusY, { 
-            zoom: 0.75, // <-- Keeps it zoomed out to show the extra nodes
+            zoom: 0.75, 
             duration: 800 
           });
         }, 50);
@@ -662,7 +690,7 @@ function FlowchartInstance() {
              {lensOptions.map(role => (
                <button
                  key={role}
-                 onClick={() => setActiveLens(role)}
+                 onClick={() => handleLensChange(role)}
                  className={cn(
                    "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all", 
                    activeLens === role 
@@ -677,7 +705,7 @@ function FlowchartInstance() {
 
            <div className="flex items-center gap-1.5 ml-2 pl-3 border-l border-slate-200">
              <button 
-               onClick={() => setLayoutDirection(prev => prev === 'LR' ? 'TB' : 'LR')}
+               onClick={handleDirectionChange}
                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors shadow-sm mr-2"
              >
                <LayoutTemplate size={14} className={layoutDirection === 'LR' ? "rotate-90" : ""} />

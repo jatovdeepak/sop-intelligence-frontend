@@ -50,7 +50,7 @@ export default function Users() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`/api/users/${userId}`, {
+      const response = await fetch(`${API_URL}/api/users/${userId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`

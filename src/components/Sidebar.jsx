@@ -8,12 +8,13 @@ import {
   BotIcon,
   ChevronLeft,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
+// Added a `requiredRole` property to easily control access
 const topLinks = [
   { to: "/", label: "Dashboard", icon: LayoutGrid },
   { to: "/library", label: "Library", icon: FileText },
-  { to: "/users", label: "Users", icon: Users },
+  { to: "/users", label: "Users", icon: Users, requiredRole: "Admin" },
   { to: "/sop-intelligence", label: "SOP Intelligence AI", icon: BotIcon },
 ];
 
@@ -24,6 +25,23 @@ const bottomLinks = [
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+
+  // Fetch the user's role from localStorage when the sidebar mounts
+  useEffect(() => {
+    // Note: Make sure you are saving the role to localStorage during your login flow!
+    // Example: localStorage.setItem("role", data.role);
+    const role = localStorage.getItem("role");
+    setUserRole(role);
+  }, []);
+
+  // Filter the links based on the user's role
+  const filteredTopLinks = topLinks.filter((link) => {
+    if (link.requiredRole && link.requiredRole !== userRole) {
+      return false; // Hide if the user doesn't have the required role
+    }
+    return true; // Show otherwise
+  });
 
   return (
     <aside
@@ -88,7 +106,8 @@ export default function Sidebar() {
 
       {/* Top Navigation */}
       <nav className="px-3 py-6 space-y-1">
-        {topLinks.map(({ to, label, icon: Icon }) => (
+        {/* Render only the filtered links */}
+        {filteredTopLinks.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

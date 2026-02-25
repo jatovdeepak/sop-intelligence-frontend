@@ -5,10 +5,10 @@ export default function DashboardHeader() {
     <div className="flex items-center justify-between py-4">
       {/* Left */}
       <div className="flex items-center gap-3 text-sm">
-        <span className="flex items-center gap-2 text-slate-600">
+        {/* <span className="flex items-center gap-2 text-slate-600">
           <span className="h-2 w-2 rounded-full bg-green-500" />
           Online
-        </span>
+        </span> */}
 
         <span className="text-slate-300">|</span>
 

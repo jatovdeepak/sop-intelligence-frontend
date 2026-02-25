@@ -7,14 +7,16 @@ import {
   Settings,
   BotIcon,
   ChevronLeft,
+  Activity // <-- 1. IMPORT THIS ICON
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-// Added a `requiredRole` property to easily control access
+// 2. ADD THE AUDIT LOGS LINK
 const topLinks = [
   { to: "/", label: "Dashboard", icon: LayoutGrid },
   { to: "/library", label: "Library", icon: FileText },
   { to: "/users", label: "Users", icon: Users, requiredRole: "Admin" },
+  { to: "/audits", label: "Audit Logs", icon: Activity, requiredRole: "Admin" }, // <-- ADDED THIS LINE
   { to: "/sop-intelligence", label: "SOP Intelligence AI", icon: BotIcon },
 ];
 
@@ -29,8 +31,6 @@ export default function Sidebar() {
 
   // Fetch the user's role from localStorage when the sidebar mounts
   useEffect(() => {
-    // Note: Make sure you are saving the role to localStorage during your login flow!
-    // Example: localStorage.setItem("role", data.role);
     const role = localStorage.getItem("role");
     setUserRole(role);
   }, []);
@@ -38,63 +38,32 @@ export default function Sidebar() {
   // Filter the links based on the user's role
   const filteredTopLinks = topLinks.filter((link) => {
     if (link.requiredRole && link.requiredRole !== userRole) {
-      return false; // Hide if the user doesn't have the required role
+      return false; 
     }
-    return true; // Show otherwise
+    return true; 
   });
 
   return (
     <aside
       className={`
         ${collapsed ? "w-20" : "w-64"}
-        relative
-        flex
-        flex-col
-        text-white
-        transition-all
-        duration-300
-        bg-gradient-to-b
-        from-[#2b3f55]
-        via-[#1a2b44]
-        to-[#0b1629]
+        relative flex flex-col text-white transition-all duration-300
+        bg-gradient-to-b from-[#2b3f55] via-[#1a2b44] to-[#0b1629]
       `}
     >
       {/* Toggle Button */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="
-          absolute
-          -right-3
-          top-6
-          z-50
-          flex
-          h-7 w-7
-          items-center
-          justify-center
-          rounded-full
-          bg-white
-          text-slate-600
-          shadow
-          hover:bg-slate-100
-        "
+        className="absolute -right-3 top-6 z-50 flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-600 shadow hover:bg-slate-100"
       >
-        <ChevronLeft
-          className={`h-4 w-4 transition-transform ${
-            collapsed ? "rotate-180" : ""
-          }`}
-        />
+        <ChevronLeft className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : ""}`} />
       </button>
 
       {/* Logo */}
       <div className="h-28 flex flex-col items-center justify-center gap-3 px-4">
         <div className="h-10 w-15 rounded-2xl bg-white flex items-center justify-center shadow-md">
-          <img
-            src="/logo.png"
-            alt="Arizon logo"
-            className="h-8 w-12 object-fill"
-          />
+          <img src="/logo.png" alt="Arizon logo" className="h-8 w-12 object-fill" />
         </div>
-
         {!collapsed && (
           <div className="text-ls font-medium tracking-wide text-center">
             SOP Intelligence System
@@ -106,25 +75,14 @@ export default function Sidebar() {
 
       {/* Top Navigation */}
       <nav className="px-3 py-6 space-y-1">
-        {/* Render only the filtered links */}
         {filteredTopLinks.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `
-            flex items-center
-            ${collapsed ? "justify-center px-0" : "gap-3 px-4"}
-            py-3
-            rounded-xl
-            text-sm font-medium
-            transition-all
-            ${
-              isActive
-                ? "bg-orange-500 text-white shadow-[0_6px_20px_rgba(249,115,22,0.45)]"
-                : "text-slate-300 hover:bg-white/5 hover:text-white"
-            }
-          `
+              `flex items-center ${collapsed ? "justify-center px-0" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium transition-all ${
+                isActive ? "bg-orange-500 text-white shadow-[0_6px_20px_rgba(249,115,22,0.45)]" : "text-slate-300 hover:bg-white/5 hover:text-white"
+              }`
             }
           >
             <Icon className="h-5 w-5 shrink-0" />
@@ -134,7 +92,6 @@ export default function Sidebar() {
       </nav>
 
       <div className="flex-1" />
-
       <div className="mx-4 h-px bg-white/10" />
 
       {/* Bottom Navigation */}
@@ -144,19 +101,9 @@ export default function Sidebar() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `
-            flex items-center
-            ${collapsed ? "justify-center px-0" : "gap-3 px-4"}
-            py-3
-            rounded-xl
-            text-sm font-medium
-            transition-all
-            ${
-              isActive
-                ? "bg-orange-500 text-white shadow-[0_6px_20px_rgba(249,115,22,0.45)]"
-                : "text-slate-300 hover:bg-white/5 hover:text-white"
-            }
-          `
+              `flex items-center ${collapsed ? "justify-center px-0" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium transition-all ${
+                isActive ? "bg-orange-500 text-white shadow-[0_6px_20px_rgba(249,115,22,0.45)]" : "text-slate-300 hover:bg-white/5 hover:text-white"
+              }`
             }
           >
             <Icon className="h-5 w-5 shrink-0" />

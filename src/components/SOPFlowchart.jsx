@@ -15,9 +15,6 @@ import {
   Share2, 
   FileText, 
   Clock, 
-  User, 
-  CheckCircle2, 
-  Calendar,
   AlertCircle,
   Plus,
   Minus,
@@ -67,7 +64,7 @@ const roleBorderColors = {
 // 2. DAGRE DYNAMIC AUTO-LAYOUT ENGINE
 // ============================================================================
 
-const NODE_WIDTH = 300; 
+const NODE_WIDTH = 320; 
 const NODE_HEIGHT = 180; 
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -138,45 +135,26 @@ function determineRoles(item) {
   return [...new Set(roles)];
 }
 
-function generateFlowData(jsonData) {
+function generateFlowData(jsonData, currentSop) {
   const nodes = [];
   const edges = [];
 
-  nodes.push({
-    id: 'root',
-    type: 'mainNode',
-    position: { x: 0, y: 0 },
-    hidden: false,
-    data: {
-      label: 'Tablet Compression PM',
-      sublabel: 'SOP: GFMN032',
-      isExpanded: false, 
-      visibleLimit: 3,  
-      details: {
-        title: 'Preventive Maintenance of Tablet Compression Machine',
-        owner: 'Engineering & QA',
-        frequency: 'Various',
-        updated: '16/06/2021',
-        docId: 'GFMN032-09',
-        description: 'Procedure for Preventive maintenance of Tablet Compression Machine (Make: KORSCH/KILIAN/SEJONG/FETTE). Comply with cGMP.'
-      }
-    },
-  });
-
-  const traverse = (items, parentId, depth) => {
+  const traverse = (items, parentId, depth, idPrefix = '') => {
     items.forEach((item) => {
       const cleanTitle = item.title.trim();
       const shortTitle = cleanTitle.length > 40 ? cleanTitle.substring(0, 40) + '...' : cleanTitle;
       const cleanContent = item.content.trim();
       const shortContent = cleanContent ? (cleanContent.length > 65 ? cleanContent.substring(0, 65) + '...' : cleanContent) : '';
 
+      const uniqueId = idPrefix ? `${idPrefix}-${item.id}` : item.id;
+
       nodes.push({
-        id: item.id,
+        id: uniqueId,
         type: 'stepNode',
         position: { x: 0, y: 0 }, 
         hidden: true, 
         data: {
-          label: `${item.id} - ${shortTitle}`,
+          label: `${item.id} - ${shortTitle}`, 
           sublabel: shortContent,
           roles: determineRoles(item),
           isDimmed: false,
@@ -195,21 +173,90 @@ function generateFlowData(jsonData) {
       });
 
       edges.push({
-        id: `e-${parentId}-${item.id}`,
+        id: `e-${parentId}-${uniqueId}`,
         source: parentId,
-        target: item.id,
+        target: uniqueId,
         type: 'default', 
         animated: depth === 1,
         style: { stroke: '#94a3b8', strokeWidth: 1.5 }
       });
 
       if (item.children && item.children.length > 0) {
-        traverse(item.children, item.id, depth + 1);
+        traverse(item.children, uniqueId, depth + 1, idPrefix);
       }
     });
   };
 
-  traverse(jsonData, 'root', 1);
+  // 1. Generate References Layer (Top Level Nodes) using referenceObjects
+  if (currentSop && currentSop.referenceObjects && Array.isArray(currentSop.referenceObjects)) {
+    currentSop.referenceObjects.forEach((refObj) => {
+      const refId = refObj.id;
+      
+      nodes.push({
+        id: refId,
+        type: 'refNode',
+        position: { x: 0, y: 0 },
+        hidden: false,
+        data: { 
+          label: refId,
+          name: refObj.name,
+          department: refObj.department,
+          version: refObj.version,
+          status: refObj.status,
+          isExpanded: false, 
+          visibleLimit: 3,
+          hasChildren: jsonData && jsonData.length > 0, 
+          details: {
+            title: `Referenced SOP: ${refObj.name || refId}`,
+            description: 'This is a linked procedure. Expand to view its internal steps.',
+            owner: refObj.department || 'Cross-Functional',
+            updated: refObj.updated || 'Linked dynamically'
+          }
+        }
+      });
+
+      edges.push({
+        id: `e-ref-${refId}-root`,
+        source: refId,
+        target: 'root',
+        type: 'default',
+        animated: true,
+        style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5,5' } 
+      });
+
+      if (jsonData) {
+        traverse(jsonData, refId, 1, refId);
+      }
+    });
+  }
+
+  // 2. Add Root Node
+  nodes.push({
+    id: 'root',
+    type: 'mainNode',
+    position: { x: 0, y: 0 },
+    hidden: false,
+    data: {
+      label: currentSop?.name || 'Tablet Compression PM',
+      sublabel: `SOP: ${currentSop?.id || 'GFMN032'}`,
+      isExpanded: false, 
+      visibleLimit: 3,
+      hasChildren: jsonData && jsonData.length > 0,
+      details: {
+        title: currentSop?.name || 'Preventive Maintenance of Tablet Compression Machine',
+        owner: currentSop?.department || 'Engineering & QA',
+        frequency: 'Various',
+        updated: currentSop?.updated || '16/06/2021',
+        docId: currentSop?.id || 'GFMN032-09',
+        description: 'Procedure for Preventive maintenance of Tablet Compression Machine. Comply with cGMP.'
+      }
+    },
+  });
+
+  if (jsonData) {
+    traverse(jsonData, 'root', 1, '');
+  }
+
   return { rawNodes: nodes, rawEdges: edges };
 }
 
@@ -239,6 +286,10 @@ const applyVisibility = (nodes, edges, activeLens) => {
   }
 
   const visibleNodeIds = new Set(['root']);
+  nodes.forEach(n => {
+    if (n.type === 'refNode') visibleNodeIds.add(n.id);
+  });
+
   const getChildren = (id) => edges.filter(e => e.source === id).map(e => e.target);
   
   const nextNodes = nodes.map(n => ({ ...n, data: { ...n.data } }));
@@ -250,30 +301,38 @@ const applyVisibility = (nodes, edges, activeLens) => {
     if (!node) return;
 
     const isTarget = activeLens === 'All' || targetNodeIds.has(nodeId);
-    node.data.isDimmed = !isTarget;
+    node.data.isDimmed = node.type === 'refNode' ? false : !isTarget;
 
     if (!node.data.isExpanded) return;
 
     const validChildren = getChildren(nodeId).filter(id => validNodeIds.has(id));
+    const collapsibleChildren = validChildren.filter(id => id !== 'root');
+
     const limit = node.data.visibleLimit || 3;
-    const childrenToShow = validChildren.slice(0, limit);
+    const childrenToShow = collapsibleChildren.slice(0, limit);
 
     childrenToShow.forEach(childId => {
       visibleNodeIds.add(childId);
       traverse(childId); 
     });
 
-    node.data.hiddenChildrenCount = validChildren.length - childrenToShow.length;
+    if (validChildren.includes('root')) visibleNodeIds.add('root');
+
+    node.data.hiddenChildrenCount = collapsibleChildren.length - childrenToShow.length;
   };
 
-  traverse('root');
+  nodes.forEach(n => {
+    if (n.type === 'refNode' || n.id === 'root') {
+      traverse(n.id);
+    }
+  });
 
   return nextNodes.map(node => ({
     ...node,
     hidden: !visibleNodeIds.has(node.id),
     data: {
       ...node.data,
-      hasChildren: getChildren(node.id).filter(id => validNodeIds.has(id)).length > 0,
+      hasChildren: getChildren(node.id).filter(id => id !== 'root' && validNodeIds.has(id)).length > 0,
     }
   }));
 };
@@ -299,11 +358,9 @@ const ExpandCollapseButton = ({ expanded, onClick, isHorizontal }) => (
   </button>
 );
 
-// FULLY REDESIGNED HOVER TOOLTIP (Always on the right)
 const HoverTooltip = ({ details }) => (
   <div className={cn(
     "absolute w-96 bg-white rounded-2xl shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 p-5 pointer-events-none z-[100000]",
-    // Aligns to the right of the node in ALL views and vertically centers it
     "left-[calc(100%+24px)] top-1/2 -translate-y-1/2",
     "animate-in fade-in zoom-in-95 duration-200 ease-out"
   )}>
@@ -351,12 +408,95 @@ const HoverTooltip = ({ details }) => (
 // 5. CUSTOM NODE COMPONENTS 
 // ============================================================================
 
+const RefNode = ({ id, data }) => {
+  const { direction, toggleNode, showMore } = useContext(FlowContext);
+  const isHorizontal = direction === 'LR';
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleMouseEnter = (e) => {
+    setIsHovered(true);
+    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
+    if (nodeWrapper) nodeWrapper.style.zIndex = '99999';
+  };
+
+  const handleMouseLeave = (e) => {
+    setIsHovered(false);
+    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
+    if (nodeWrapper) nodeWrapper.style.zIndex = '';
+  };
+
+  return (
+    <div 
+      onMouseEnter={handleMouseEnter} 
+      onMouseLeave={handleMouseLeave}
+      className="relative transition-all duration-200 z-10"
+    >
+      <div className={cn(
+        "w-72 p-4 rounded-xl shadow-sm border-2 border-dashed border-amber-400 bg-amber-50 transition-all duration-300",
+        isHovered && "ring-4 ring-amber-500/20 scale-[1.02]"
+      )}>
+        <Handle type="target" position={isHorizontal ? Position.Left : Position.Top} className="opacity-0" />
+        <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0" />
+        
+        {data.hasChildren && (
+          <ExpandCollapseButton expanded={data.isExpanded} onClick={() => toggleNode(id)} isHorizontal={isHorizontal} />
+        )}
+
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-amber-200/50 rounded-lg text-amber-700 mt-1">
+            <Share2 size={18} />
+          </div>
+          <div className="flex-1">
+            <div className="flex justify-between items-start">
+               <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600/80 mb-0.5">
+                 Referenced SOP
+               </div>
+               {data.version && (
+                 <span className="text-[9px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-300/50">
+                   {data.version}
+                 </span>
+               )}
+            </div>
+            
+            <div className="font-bold text-amber-900 text-[15px] mb-0.5">
+              {data.label}
+            </div>
+            
+            {data.name && (
+              <div className="text-amber-800/90 text-[13px] font-medium leading-snug line-clamp-2">
+                {data.name}
+              </div>
+            )}
+            
+            {data.department && (
+              <div className="inline-block mt-2 px-2 py-0.5 bg-white/60 border border-amber-200 rounded text-[10px] font-semibold text-amber-700 uppercase tracking-wide">
+                Dept: {data.department}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {data.isExpanded && data.hiddenChildrenCount > 0 && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); showMore(id); }}
+            className="mt-4 w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200/50 hover:bg-amber-200 rounded-lg transition-colors border border-amber-300"
+          >
+            <Plus size={12} strokeWidth={3} />
+            Show {data.hiddenChildrenCount} More
+          </button>
+        )}
+      </div>
+      
+      {isHovered && <HoverTooltip details={data.details} />}
+    </div>
+  );
+};
+
 const MainNode = ({ id, data }) => {
   const { direction, toggleNode, showMore } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
-  // Z-index dynamic elevation fix
   const handleMouseEnter = (e) => {
     setIsHovered(true);
     const nodeWrapper = e.currentTarget.closest('.react-flow__node');
@@ -379,6 +519,7 @@ const MainNode = ({ id, data }) => {
         "w-72 p-4 rounded-xl shadow-lg transition-all duration-300 bg-blue-600 text-white border border-blue-500",
         isHovered && "ring-4 ring-blue-500/30 scale-[1.02]"
       )}>
+        <Handle type="target" position={isHorizontal ? Position.Left : Position.Top} className="opacity-0 pointer-events-none" />
         <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0 pointer-events-none" />
         
         {data.hasChildren && (
@@ -423,7 +564,6 @@ const StepNode = ({ id, data }) => {
   const primaryRole = data.roles && data.roles.length > 0 ? data.roles[0] : null;
   const topBorderColor = primaryRole ? roleBorderColors[primaryRole] : 'border-t-slate-300';
 
-  // Z-index dynamic elevation fix
   const handleMouseEnter = (e) => {
     setIsHovered(true);
     const nodeWrapper = e.currentTarget.closest('.react-flow__node');
@@ -511,14 +651,15 @@ const StepNode = ({ id, data }) => {
 const nodeTypes = {
   mainNode: MainNode,
   stepNode: StepNode,
+  refNode: RefNode,
 };
 
 // ============================================================================
 // 6. MAIN COMPONENT (WRAPPER)
 // ============================================================================
 
-function FlowchartInstance() {
-  const { rawNodes, rawEdges } = useMemo(() => generateFlowData(structureData), []);
+function FlowchartInstance({ sop }) {
+  const { rawNodes, rawEdges } = useMemo(() => generateFlowData(structureData, sop), [sop]);
   const [activeLens, setActiveLens] = useState('All');
   const [layoutDirection, setLayoutDirection] = useState('TB'); 
 
@@ -801,7 +942,7 @@ export default function SOPFlowchart({ sop, onClose }) {
       
       <div className="flex-1 w-full bg-slate-50 relative overflow-hidden">
         <ReactFlowProvider>
-          <FlowchartInstance />
+          <FlowchartInstance sop={sop} />
         </ReactFlowProvider>
       </div>
     </div>

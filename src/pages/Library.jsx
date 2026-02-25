@@ -13,7 +13,7 @@ import { useState, useRef, useEffect } from "react";
 import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
 import ChatWithSOP from "../components/ChatWithSOP";
 import AddSOPModal from "../components/AddSOPModal";
-import SOPFlowchart from "../components/SOPFlowchart"; 
+import SOPFlowchart from "../components/SOPFlowchart";
 
 export default function Library() {
   const [showCompliance, setShowCompliance] = useState(false);
@@ -27,10 +27,11 @@ export default function Library() {
       id: "SOP-001",
       name: "Tablet Compression PM",
       version: "v1.1",
-      department: "Technician - Engineering",
+      department: "Engineering",
       createdBy: "Deepak",
       updated: "2024-06-23",
       status: "active",
+      references: ["SOP-004", "SOP-042"], // References Cleaning and Emergency Shutdown
     },
     {
       id: "SOP-004",
@@ -40,6 +41,7 @@ export default function Library() {
       createdBy: "Neha",
       updated: "2025-09-20",
       status: "active",
+      references: ["SOP-015"],
     },
     {
       id: "SOP-015",
@@ -49,6 +51,7 @@ export default function Library() {
       createdBy: "Rohit",
       updated: "2025-10-01",
       status: "draft",
+      references: ["SOP-022", "SOP-035"],
     },
     {
       id: "SOP-022",
@@ -58,6 +61,47 @@ export default function Library() {
       createdBy: "Priya",
       updated: "2025-08-10",
       status: "active",
+      references: ["SOP-051"],
+    },
+    {
+      id: "SOP-035",
+      name: "Material Handling",
+      version: "v1.4",
+      department: "Warehouse",
+      createdBy: "Arjun",
+      updated: "2025-11-12",
+      status: "active",
+      references: ["SOP-015", "SOP-042"],
+    },
+    {
+      id: "SOP-042",
+      name: "Emergency Shutdown",
+      version: "v5.0",
+      department: "Safety",
+      createdBy: "Suresh",
+      updated: "2026-01-05",
+      status: "active",
+      references: ["SOP-001"],
+    },
+    {
+      id: "SOP-051",
+      name: "Lab Calibration",
+      version: "v2.2",
+      department: "QC",
+      createdBy: "Meera",
+      updated: "2025-12-15",
+      status: "draft",
+      references: ["SOP-022", "SOP-004"],
+    },
+    {
+      id: "SOP-060",
+      name: "Waste Disposal",
+      version: "v1.0",
+      department: "Safety",
+      createdBy: "Vikram",
+      updated: "2026-02-10",
+      status: "active",
+      references: ["SOP-004", "SOP-035", "SOP-042"],
     },
   ];
 
@@ -113,9 +157,9 @@ export default function Library() {
                 setOpen(false);
               }}
             />
-            <MenuItem 
-              icon={GitBranch} 
-              label="SOP Flow Map" 
+            <MenuItem
+              icon={GitBranch}
+              label="SOP Flow Map"
               onClick={() => {
                 onFlowchart();
                 setOpen(false);
@@ -199,10 +243,9 @@ export default function Library() {
       </div>
 
       {/* Table */}
-      {/* FIX: Changed overflow-hidden to overflow-visible so the menu can pop out */}
       <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-visible">
         <div className="p-6 pb-4">
-           <h2 className="font-medium text-slate-800">All SOPs</h2>
+          <h2 className="font-medium text-slate-800">All SOPs</h2>
         </div>
 
         <table className="w-full text-sm">
@@ -225,7 +268,9 @@ export default function Library() {
                 key={row.id}
                 className="hover:bg-slate-50/80 transition duration-150"
               >
-                <td className="py-4 px-6 font-medium text-slate-700">{row.id}</td>
+                <td className="py-4 px-6 font-medium text-slate-700">
+                  {row.id}
+                </td>
                 <td className="py-4 px-6 text-slate-700">{row.name}</td>
                 <td className="py-4 px-6 text-slate-500">{row.version}</td>
                 <td className="py-4 px-6 text-slate-500">{row.department}</td>
@@ -245,7 +290,7 @@ export default function Library() {
                 <td className="py-4 px-6">
                   <div className="flex items-center gap-4">
                     <button className="p-1 hover:bg-blue-50 rounded transition">
-                        <Eye className="h-4 w-4 cursor-pointer text-slate-400 hover:text-blue-600" />
+                      <Eye className="h-4 w-4 cursor-pointer text-slate-400 hover:text-blue-600" />
                     </button>
                     <ActionsMenu
                       onCompliance={() => {
@@ -257,7 +302,20 @@ export default function Library() {
                         setShowChat(true);
                       }}
                       onFlowchart={() => {
-                        setSelectedSop(row);
+                        // ENHANCEMENT: Fetch the full objects for each referenced SOP ID
+                        const referenceObjects = (row.references || []).map((refId) => {
+                          const foundSop = rows.find((r) => r.id === refId);
+                          // Fallback structure in case an ID doesn't exist in the dummy rows
+                          return foundSop || { id: refId, name: "Unknown SOP", department: "Unknown", status: "N/A" };
+                        });
+
+                        // Create an enriched version of the selected SOP containing both arrays
+                        const enrichedSop = {
+                          ...row,
+                          referenceObjects: referenceObjects,
+                        };
+
+                        setSelectedSop(enrichedSop);
                         setShowFlowchart(true);
                       }}
                     />
@@ -291,7 +349,10 @@ export default function Library() {
       {/* Flowchart Modal */}
       {showFlowchart && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-           <SOPFlowchart sop={selectedSop} onClose={() => setShowFlowchart(false)} />
+          <SOPFlowchart
+            sop={selectedSop}
+            onClose={() => setShowFlowchart(false)}
+          />
         </div>
       )}
 

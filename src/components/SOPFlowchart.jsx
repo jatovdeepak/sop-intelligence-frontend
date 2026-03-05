@@ -37,7 +37,8 @@ export const FlowContext = createContext({
   activeLens: 'All', 
   direction: 'TB',
   toggleNode: (id) => {},
-  showMore: (id) => {}
+  showMore: (id) => {},
+  expandAllFromNode: (id) => {}
 });
 
 // Helper for conditional classes
@@ -187,10 +188,8 @@ function generateFlowData(jsonData, currentSop) {
     });
   };
 
-  // 1. Generate References Layer (Top Level Nodes) using referenceObjects
   if (currentSop && currentSop.referenceObjects && Array.isArray(currentSop.referenceObjects)) {
     currentSop.referenceObjects.forEach((refObj) => {
-      // FIX: Use sopId from backend, fallback to id for dummy data
       const refId = refObj.sopId || refObj.id; 
       
       nodes.push({
@@ -200,9 +199,7 @@ function generateFlowData(jsonData, currentSop) {
         hidden: false,
         data: { 
           label: refId,
-          // FIX: Use title from backend, fallback to name
           name: refObj.title || refObj.name,
-          // FIX: Use type from backend, fallback to department
           department: refObj.type || refObj.department,
           version: refObj.version || 'v1.0',
           status: refObj.status,
@@ -233,14 +230,12 @@ function generateFlowData(jsonData, currentSop) {
     });
   }
 
-  // 2. Add Root Node
   nodes.push({
     id: 'root',
     type: 'mainNode',
     position: { x: 0, y: 0 },
     hidden: false,
     data: {
-      // FIX: Mapping backend fields for the main document
       label: currentSop?.title || currentSop?.name || 'Tablet Compression PM',
       sublabel: `SOP: ${currentSop?.sopId || currentSop?.id || 'GFMN032'}`,
       isExpanded: false, 
@@ -345,21 +340,42 @@ const applyVisibility = (nodes, edges, activeLens) => {
 // 4. LOGIC HELPERS & SHARED UI
 // ============================================================================
 
-const ExpandCollapseButton = ({ expanded, onClick, isHorizontal }) => (
-  <button 
-    onClick={(e) => {
-      e.stopPropagation(); 
-      onClick();
-    }}
-    className={cn(
-      "absolute flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors shadow-sm z-50 border-2 border-white cursor-pointer",
-      isHorizontal 
-        ? "-right-3 top-1/2 -translate-y-1/2" 
-        : "-bottom-3 left-1/2 -translate-x-1/2"
+const ExpandCollapseButton = ({ expanded, onClick, onExpandAll, isHorizontal, colorClass = "bg-blue-500 hover:bg-blue-600" }) => (
+  <div className={cn(
+    "absolute flex items-center gap-1.5 z-50",
+    isHorizontal 
+      ? "-right-5 top-1/2 -translate-y-1/2 flex-col" 
+      : "-bottom-4 left-1/2 -translate-x-1/2 flex-row"
+  )}>
+    <button 
+      onClick={(e) => {
+        e.stopPropagation(); 
+        onClick();
+      }}
+      className={cn(
+        "flex items-center justify-center w-6 h-6 rounded-full text-white transition-colors shadow-sm border-2 border-white cursor-pointer",
+        colorClass
+      )}
+      title={expanded ? "Collapse" : "Expand Level"}
+    >
+      {expanded ? <Minus size={12} /> : <Plus size={12} />}
+    </button>
+    {onExpandAll && (
+      <button 
+        onClick={(e) => {
+          e.stopPropagation(); 
+          onExpandAll();
+        }}
+        className={cn(
+          "flex items-center justify-center w-6 h-6 rounded-full text-white transition-colors shadow-sm border-2 border-white cursor-pointer",
+          colorClass
+        )}
+        title="Expand All Under Node"
+      >
+        <ChevronsDown size={12} />
+      </button>
     )}
-  >
-    {expanded ? <Minus size={12} /> : <Plus size={12} />}
-  </button>
+  </div>
 );
 
 const HoverTooltip = ({ details }) => (
@@ -413,7 +429,7 @@ const HoverTooltip = ({ details }) => (
 // ============================================================================
 
 const RefNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
@@ -443,7 +459,13 @@ const RefNode = ({ id, data }) => {
         <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0" />
         
         {data.hasChildren && (
-          <ExpandCollapseButton expanded={data.isExpanded} onClick={() => toggleNode(id)} isHorizontal={isHorizontal} />
+          <ExpandCollapseButton 
+            expanded={data.isExpanded} 
+            onClick={() => toggleNode(id)} 
+            onExpandAll={() => expandAllFromNode(id)}
+            isHorizontal={isHorizontal} 
+            colorClass="bg-amber-500 hover:bg-amber-600"
+          />
         )}
 
         <div className="flex items-start gap-3">
@@ -497,7 +519,7 @@ const RefNode = ({ id, data }) => {
 };
 
 const MainNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
@@ -527,7 +549,12 @@ const MainNode = ({ id, data }) => {
         <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0 pointer-events-none" />
         
         {data.hasChildren && (
-          <ExpandCollapseButton expanded={data.isExpanded} onClick={() => toggleNode(id)} isHorizontal={isHorizontal} />
+          <ExpandCollapseButton 
+            expanded={data.isExpanded} 
+            onClick={() => toggleNode(id)} 
+            onExpandAll={() => expandAllFromNode(id)}
+            isHorizontal={isHorizontal} 
+          />
         )}
 
         <div className="flex items-start justify-between mb-3">
@@ -561,7 +588,7 @@ const MainNode = ({ id, data }) => {
 };
 
 const StepNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
@@ -596,7 +623,12 @@ const StepNode = ({ id, data }) => {
         <Handle type="source" position={isHorizontal ? Position.Right : Position.Bottom} className="opacity-0" />
         
         {data.hasChildren && (
-          <ExpandCollapseButton expanded={data.isExpanded} onClick={() => toggleNode(id)} isHorizontal={isHorizontal} />
+          <ExpandCollapseButton 
+            expanded={data.isExpanded} 
+            onClick={() => toggleNode(id)} 
+            onExpandAll={() => expandAllFromNode(id)}
+            isHorizontal={isHorizontal} 
+          />
         )}
 
         <div className="flex justify-between items-start mb-2">
@@ -797,19 +829,45 @@ function FlowchartInstance({ sop }) {
     });
   }, [getEdges, setNodes, setCenter, activeLens, layoutDirection]);
 
-  const handleExpandAll = useCallback(() => {
+  // Expand all descendant nodes starting from a specific node ID
+  const expandAllFromNode = useCallback((startNodeId) => {
     const currentEdges = getEdges();
+    const descendants = new Set([startNodeId]);
+    let added = true;
+    
+    // Iteratively find all children recursively
+    while (added) {
+      added = false;
+      currentEdges.forEach(e => {
+        if (descendants.has(e.source) && !descendants.has(e.target)) {
+          // Exclude root connection if expanding a refNode so it doesn't bleed back into the main tree
+          if (e.target !== 'root') { 
+            descendants.add(e.target);
+            added = true;
+          }
+        }
+      });
+    }
+
     setNodes(nds => {
-      const nextNodes = nds.map(n => ({ 
-        ...n, 
-        data: { ...n.data, isExpanded: true, visibleLimit: 9999 } 
-      }));
+      const nextNodes = nds.map(n => {
+        if (descendants.has(n.id)) {
+          return { ...n, data: { ...n.data, isExpanded: true, visibleLimit: 9999 } };
+        }
+        return n;
+      });
       const updated = applyVisibility(nextNodes, currentEdges, activeLens);
       const { nodes: layouted } = getLayoutedElements(updated, currentEdges, layoutDirection);
       return layouted;
     });
+    
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
   }, [getEdges, setNodes, fitView, activeLens, layoutDirection]);
+
+  // Global Expand All only triggers on the main 'root' node now
+  const handleExpandAll = useCallback(() => {
+    expandAllFromNode('root');
+  }, [expandAllFromNode]);
 
   const handleCollapseAll = useCallback(() => {
     const currentEdges = getEdges();
@@ -832,7 +890,7 @@ function FlowchartInstance({ sop }) {
   return (
     <div className="w-full h-full bg-slate-50 relative flex font-sans overflow-hidden">
       
-      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, toggleNode, showMore }}>
+      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, toggleNode, showMore, expandAllFromNode }}>
         <div className="flex-1 h-full p-6">
           <ReactFlow
             nodes={nodes}

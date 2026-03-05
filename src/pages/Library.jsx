@@ -12,15 +12,17 @@ import { useState, useRef, useEffect } from "react";
 import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
 import ChatWithSOP from "../components/ChatWithSOP";
 import AddSOPModal from "../components/AddSOPModal";
+import EditSOPModal from "../components/EditSOPModal"; // <-- NEW IMPORT
 import SOPFlowchart from "../components/SOPFlowchart";
 
 export default function Library() {
   const [showCompliance, setShowCompliance] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showAddSOP, setShowAddSOP] = useState(false);
+  const [showEditSOP, setShowEditSOP] = useState(false); // <-- NEW STATE
   const [showFlowchart, setShowFlowchart] = useState(false);
   const [selectedSop, setSelectedSop] = useState(null);
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "";
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   
   // Dynamic state for SOPs fetched from the backend
   const [sops, setSops] = useState([]);
@@ -57,7 +59,32 @@ export default function Library() {
     fetchSOPs();
   }, []);
 
-  function ActionsMenu({ onCompliance, onChat, onFlowchart }) {
+  // NEW: Delete SOP Handler
+  const handleDeleteSOP = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this SOP? This action cannot be undone.")) return;
+    
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/api/sops/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete SOP");
+      }
+
+      // Refresh the list after successful deletion
+      fetchSOPs();
+    } catch (err) {
+      alert("Error deleting SOP: " + err.message);
+    }
+  };
+
+  // ADDED onEdit and onDelete props
+  function ActionsMenu({ onCompliance, onChat, onFlowchart, onEdit, onDelete }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
@@ -91,7 +118,15 @@ export default function Library() {
             py-1
           "
           >
-            <MenuItem icon={Pencil} label="Edit" />
+            {/* UPDATED EDIT BUTTON */}
+            <MenuItem 
+              icon={Pencil} 
+              label="Edit" 
+              onClick={() => {
+                onEdit();
+                setOpen(false);
+              }} 
+            />
             <MenuItem icon={History} label="View Version" />
             <MenuItem
               icon={MessageSquare}
@@ -120,7 +155,16 @@ export default function Library() {
 
             <div className="my-1 h-px bg-slate-200" />
 
-            <MenuItem icon={Trash2} label="Delete" danger />
+            {/* UPDATED DELETE BUTTON */}
+            <MenuItem 
+              icon={Trash2} 
+              label="Delete" 
+              danger 
+              onClick={() => {
+                onDelete();
+                setOpen(false);
+              }} 
+            />
           </div>
         )}
       </div>
@@ -245,7 +289,6 @@ export default function Library() {
                   <td className="py-4 px-6 text-slate-500">{row.version || 'v1.0'}</td>
                   <td className="py-4 px-6 text-slate-500">{row.type}</td>
                   <td className="py-4 px-6 text-slate-500">
-                    {/* Format the MongoDB ISO date string */}
                     {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="py-4 px-6">
@@ -263,15 +306,19 @@ export default function Library() {
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-4">
-                      {/* Optional link to view the PDF if you have the endpoint available */}
                       <button 
-                        onClick={() => window.open(`http://localhost:3000/api/sops/${row._id}/pdf`, "_blank")}
+                        onClick={() => window.open(`${API_URL}/api/sops/${row._id}/pdf`, "_blank")}
                         className="p-1 hover:bg-blue-50 rounded transition"
                         title="View PDF"
                       >
                         <Eye className="h-4 w-4 cursor-pointer text-slate-400 hover:text-blue-600" />
                       </button>
                       <ActionsMenu
+                        onEdit={() => {
+                          setSelectedSop(row);
+                          setShowEditSOP(true);
+                        }}
+                        onDelete={() => handleDeleteSOP(row._id)}
                         onCompliance={() => {
                           setSelectedSop(row);
                           setShowCompliance(true);
@@ -281,8 +328,6 @@ export default function Library() {
                           setShowChat(true);
                         }}
                         onFlowchart={() => {
-                          // Note: Backend doesn't have a references array yet. 
-                          // Defaulting to empty array to prevent Flowchart errors.
                           const referenceObjects = (row.references || []).map((refId) => {
                             const foundSop = sops.find((r) => r.sopId === refId);
                             return foundSop || { sopId: refId, title: "Unknown SOP", type: "Unknown", status: "N/A" };
@@ -333,11 +378,19 @@ export default function Library() {
         </div>
       )}
 
-      {/* Pass fetchSOPs to onSOPAdded so the table refetches when you upload a new one */}
       {showAddSOP && (
         <AddSOPModal 
           onClose={() => setShowAddSOP(false)} 
           onSOPAdded={fetchSOPs} 
+        />
+      )}
+
+      {/* NEW: Edit SOP Modal */}
+      {showEditSOP && selectedSop && (
+        <EditSOPModal 
+          sop={selectedSop}
+          onClose={() => setShowEditSOP(false)} 
+          onSOPEdited={fetchSOPs} 
         />
       )}
     </div>

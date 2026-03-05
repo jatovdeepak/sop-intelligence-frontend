@@ -292,6 +292,8 @@ export default function SOPIntelligenceUser() {
   const [loading, setLoading] = useState(false);
   const [chatMode, setChatMode] = useState(false);
 
+  const API_URL = import.meta.env.VITE_API_RAG_URL || "";
+
   const bottomRef = useRef(null);
 
   // 👈 NEW: Initialize User ID and fetch history on mount
@@ -313,7 +315,7 @@ export default function SOPIntelligenceUser() {
   // 👈 UPDATE THIS FUNCTION in both User and Admin components
   const fetchHistory = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/user/history/${id}`);
+      const res = await fetch(`${API_URL}/user/history/${id}`);
       if (!res.ok) return;
       const data = await res.json();
       
@@ -355,7 +357,7 @@ export default function SOPIntelligenceUser() {
   const handleClearHistory = async () => {
     if (!window.confirm("Are you sure you want to clear your chat history?")) return;
     try {
-      await fetch(`http://localhost:8000/user/clear-history/${userId}`, { method: "POST" });
+      await fetch(`${API_URL}/user/clear-history/${userId}`, { method: "POST" });
       setMessages([]);
       setChatMode(false);
     } catch (err) {
@@ -383,7 +385,7 @@ export default function SOPIntelligenceUser() {
 
     try {
       // 👈 UPDATED: Pointing to /user/chat and sending user_id
-      const res = await fetch("http://localhost:8000/user/chat", {
+      const res = await fetch(`${API_URL}/user/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

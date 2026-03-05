@@ -309,6 +309,8 @@ export default function SOPIntelligenceAdmin() {
   const [loading, setLoading] = useState(false);
   const [chatMode, setChatMode] = useState(false);
   
+  const API_URL = import.meta.env.VITE_API_RAG_URL || "";
+
   const [commentDrafts, setCommentDrafts] = useState({});
   const bottomRef = useRef(null);
 
@@ -325,7 +327,7 @@ export default function SOPIntelligenceAdmin() {
   // 👈 UPDATE THIS FUNCTION in both User and Admin components
   const fetchHistory = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/user/history/${id}`);
+      const res = await fetch(`${API_URL}/user/history/${id}`);
       if (!res.ok) return;
       const data = await res.json();
       
@@ -366,7 +368,7 @@ export default function SOPIntelligenceAdmin() {
   const handleClearCache = async () => {
     if(!window.confirm("Clear the Semantic Cache? This forces RAG for all queries.")) return;
     try {
-      const res = await fetch("http://localhost:8000/admin/clear-cache", { method: "POST" });
+      const res = await fetch(`${API_URL}/admin/clear-cache`, { method: "POST" });
       const data = await res.json();
       alert(data.message);
     } catch (err) {
@@ -377,7 +379,7 @@ export default function SOPIntelligenceAdmin() {
   const handleClearAllHistory = async () => {
     if(!window.confirm("WARNING: Clear ALL user chat history? This cannot be undone.")) return;
     try {
-      const res = await fetch("http://localhost:8000/admin/clear-history", { method: "POST" });
+      const res = await fetch(`${API_URL}/admin/clear-history`, { method: "POST" });
       const data = await res.json();
       alert(data.message);
       setMessages([]);
@@ -403,7 +405,7 @@ export default function SOPIntelligenceAdmin() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/user/chat", {
+      const res = await fetch(`${API_URL}/user/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -463,7 +465,7 @@ export default function SOPIntelligenceAdmin() {
   const handleApprove = async (index, msg) => {
     const comment = commentDrafts[index] || "";
     try {
-      const res = await fetch("http://localhost:8000/admin/approve", {
+      const res = await fetch(`${API_URL}/admin/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

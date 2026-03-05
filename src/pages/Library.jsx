@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   GitBranch,
   Trash2,
-  X,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
@@ -21,89 +20,42 @@ export default function Library() {
   const [showAddSOP, setShowAddSOP] = useState(false);
   const [showFlowchart, setShowFlowchart] = useState(false);
   const [selectedSop, setSelectedSop] = useState(null);
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "";
+  
+  // Dynamic state for SOPs fetched from the backend
+  const [sops, setSops] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const rows = [
-    {
-      id: "SOP-001",
-      name: "Tablet Compression PM",
-      version: "v1.1",
-      department: "Engineering",
-      createdBy: "Deepak",
-      updated: "2024-06-23",
-      status: "active",
-      references: ["SOP-004", "SOP-042"], // References Cleaning and Emergency Shutdown
-    },
-    {
-      id: "SOP-004",
-      name: "Cleaning Procedures",
-      version: "v2.1",
-      department: "Production",
-      createdBy: "Neha",
-      updated: "2025-09-20",
-      status: "active",
-      references: ["SOP-015"],
-    },
-    {
-      id: "SOP-015",
-      name: "Batch Management",
-      version: "v1.0",
-      department: "Production",
-      createdBy: "Rohit",
-      updated: "2025-10-01",
-      status: "draft",
-      references: ["SOP-022", "SOP-035"],
-    },
-    {
-      id: "SOP-022",
-      name: "Quality Control",
-      version: "v3.2",
-      department: "QC",
-      createdBy: "Priya",
-      updated: "2025-08-10",
-      status: "active",
-      references: ["SOP-051"],
-    },
-    {
-      id: "SOP-035",
-      name: "Material Handling",
-      version: "v1.4",
-      department: "Warehouse",
-      createdBy: "Arjun",
-      updated: "2025-11-12",
-      status: "active",
-      references: ["SOP-015", "SOP-042"],
-    },
-    {
-      id: "SOP-042",
-      name: "Emergency Shutdown",
-      version: "v5.0",
-      department: "Safety",
-      createdBy: "Suresh",
-      updated: "2026-01-05",
-      status: "active",
-      references: ["SOP-001"],
-    },
-    {
-      id: "SOP-051",
-      name: "Lab Calibration",
-      version: "v2.2",
-      department: "QC",
-      createdBy: "Meera",
-      updated: "2025-12-15",
-      status: "draft",
-      references: ["SOP-022", "SOP-004"],
-    },
-    {
-      id: "SOP-060",
-      name: "Waste Disposal",
-      version: "v1.0",
-      department: "Safety",
-      createdBy: "Vikram",
-      updated: "2026-02-10",
-      status: "active",
-      references: ["SOP-004", "SOP-035", "SOP-042"],
-    },
-  ];
+  // Fetch SOPs from Backend
+  const fetchSOPs = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/api/sops`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch SOPs");
+      }
+
+      const data = await response.json();
+      setSops(data);
+    } catch (err) {
+      setError(err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Run on component mount
+  useEffect(() => {
+    fetchSOPs();
+  }, []);
 
   function ActionsMenu({ onCompliance, onChat, onFlowchart }) {
     const [open, setOpen] = useState(false);
@@ -225,7 +177,7 @@ export default function Library() {
         <div className="grid grid-cols-4 gap-4">
           <input
             className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-            placeholder="Department"
+            placeholder="Type/Department"
           />
           <input
             className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
@@ -248,14 +200,19 @@ export default function Library() {
           <h2 className="font-medium text-slate-800">All SOPs</h2>
         </div>
 
+        {error && (
+          <div className="px-6 pb-4 text-sm text-red-500">
+            Error loading SOPs: {error}
+          </div>
+        )}
+
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
             <tr>
               <th className="py-3 px-6 text-left font-medium">SOP ID</th>
               <th className="py-3 px-6 text-left font-medium">SOP Name</th>
               <th className="py-3 px-6 text-left font-medium">Version</th>
-              <th className="py-3 px-6 text-left font-medium">Department</th>
-              <th className="py-3 px-6 text-left font-medium">Created By</th>
+              <th className="py-3 px-6 text-left font-medium">Type</th>
               <th className="py-3 px-6 text-left font-medium">Last Updated</th>
               <th className="py-3 px-6 text-left font-medium">Status</th>
               <th className="py-3 px-6 text-left font-medium">Actions</th>
@@ -263,72 +220,94 @@ export default function Library() {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <tr
-                key={row.id}
-                className="hover:bg-slate-50/80 transition duration-150"
-              >
-                <td className="py-4 px-6 font-medium text-slate-700">
-                  {row.id}
-                </td>
-                <td className="py-4 px-6 text-slate-700">{row.name}</td>
-                <td className="py-4 px-6 text-slate-500">{row.version}</td>
-                <td className="py-4 px-6 text-slate-500">{row.department}</td>
-                <td className="py-4 px-6 text-slate-500">{row.createdBy}</td>
-                <td className="py-4 px-6 text-slate-500">{row.updated}</td>
-                <td className="py-4 px-6">
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      row.status === "active"
-                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                        : "bg-amber-100 text-amber-700 border border-amber-200"
-                    }`}
-                  >
-                    {row.status}
-                  </span>
-                </td>
-                <td className="py-4 px-6">
-                  <div className="flex items-center gap-4">
-                    <button className="p-1 hover:bg-blue-50 rounded transition">
-                      <Eye className="h-4 w-4 cursor-pointer text-slate-400 hover:text-blue-600" />
-                    </button>
-                    <ActionsMenu
-                      onCompliance={() => {
-                        setSelectedSop(row);
-                        setShowCompliance(true);
-                      }}
-                      onChat={() => {
-                        setSelectedSop(row);
-                        setShowChat(true);
-                      }}
-                      onFlowchart={() => {
-                        // ENHANCEMENT: Fetch the full objects for each referenced SOP ID
-                        const referenceObjects = (row.references || []).map((refId) => {
-                          const foundSop = rows.find((r) => r.id === refId);
-                          // Fallback structure in case an ID doesn't exist in the dummy rows
-                          return foundSop || { id: refId, name: "Unknown SOP", department: "Unknown", status: "N/A" };
-                        });
-
-                        // Create an enriched version of the selected SOP containing both arrays
-                        const enrichedSop = {
-                          ...row,
-                          referenceObjects: referenceObjects,
-                        };
-
-                        setSelectedSop(enrichedSop);
-                        setShowFlowchart(true);
-                      }}
-                    />
-                  </div>
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="py-8 text-center text-slate-500">
+                  Loading SOPs...
                 </td>
               </tr>
-            ))}
+            ) : sops.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="py-8 text-center text-slate-500">
+                  No SOPs found. Add one to get started!
+                </td>
+              </tr>
+            ) : (
+              sops.map((row) => (
+                <tr
+                  key={row._id || row.sopId}
+                  className="hover:bg-slate-50/80 transition duration-150"
+                >
+                  <td className="py-4 px-6 font-medium text-slate-700">
+                    {row.sopId}
+                  </td>
+                  <td className="py-4 px-6 text-slate-700">{row.title}</td>
+                  <td className="py-4 px-6 text-slate-500">{row.version || 'v1.0'}</td>
+                  <td className="py-4 px-6 text-slate-500">{row.type}</td>
+                  <td className="py-4 px-6 text-slate-500">
+                    {/* Format the MongoDB ISO date string */}
+                    {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : 'N/A'}
+                  </td>
+                  <td className="py-4 px-6">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+                        row.status?.toLowerCase() === "active"
+                          ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          : row.status?.toLowerCase() === "archived"
+                          ? "bg-slate-100 text-slate-700 border border-slate-200"
+                          : "bg-amber-100 text-amber-700 border border-amber-200"
+                      }`}
+                    >
+                      {row.status || 'Draft'}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-4">
+                      {/* Optional link to view the PDF if you have the endpoint available */}
+                      <button 
+                        onClick={() => window.open(`http://localhost:3000/api/sops/${row._id}/pdf`, "_blank")}
+                        className="p-1 hover:bg-blue-50 rounded transition"
+                        title="View PDF"
+                      >
+                        <Eye className="h-4 w-4 cursor-pointer text-slate-400 hover:text-blue-600" />
+                      </button>
+                      <ActionsMenu
+                        onCompliance={() => {
+                          setSelectedSop(row);
+                          setShowCompliance(true);
+                        }}
+                        onChat={() => {
+                          setSelectedSop(row);
+                          setShowChat(true);
+                        }}
+                        onFlowchart={() => {
+                          // Note: Backend doesn't have a references array yet. 
+                          // Defaulting to empty array to prevent Flowchart errors.
+                          const referenceObjects = (row.references || []).map((refId) => {
+                            const foundSop = sops.find((r) => r.sopId === refId);
+                            return foundSop || { sopId: refId, title: "Unknown SOP", type: "Unknown", status: "N/A" };
+                          });
+
+                          const enrichedSop = {
+                            ...row,
+                            referenceObjects: referenceObjects,
+                          };
+
+                          setSelectedSop(enrichedSop);
+                          setShowFlowchart(true);
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Compliance Modal */}
-      {showCompliance && (
+      {/* Modals */}
+      {showCompliance && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="relative w-full max-w-6xl h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <FDAComplianceAnalysis
@@ -339,15 +318,13 @@ export default function Library() {
         </div>
       )}
 
-      {/* Chat Modal */}
-      {showChat && (
+      {showChat && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <ChatWithSOP sop={selectedSop} onClose={() => setShowChat(false)} />
         </div>
       )}
 
-      {/* Flowchart Modal */}
-      {showFlowchart && (
+      {showFlowchart && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <SOPFlowchart
             sop={selectedSop}
@@ -356,7 +333,13 @@ export default function Library() {
         </div>
       )}
 
-      {showAddSOP && <AddSOPModal onClose={() => setShowAddSOP(false)} />}
+      {/* Pass fetchSOPs to onSOPAdded so the table refetches when you upload a new one */}
+      {showAddSOP && (
+        <AddSOPModal 
+          onClose={() => setShowAddSOP(false)} 
+          onSOPAdded={fetchSOPs} 
+        />
+      )}
     </div>
   );
 }

@@ -190,7 +190,8 @@ function generateFlowData(jsonData, currentSop) {
   // 1. Generate References Layer (Top Level Nodes) using referenceObjects
   if (currentSop && currentSop.referenceObjects && Array.isArray(currentSop.referenceObjects)) {
     currentSop.referenceObjects.forEach((refObj) => {
-      const refId = refObj.id;
+      // FIX: Use sopId from backend, fallback to id for dummy data
+      const refId = refObj.sopId || refObj.id; 
       
       nodes.push({
         id: refId,
@@ -199,18 +200,20 @@ function generateFlowData(jsonData, currentSop) {
         hidden: false,
         data: { 
           label: refId,
-          name: refObj.name,
-          department: refObj.department,
-          version: refObj.version,
+          // FIX: Use title from backend, fallback to name
+          name: refObj.title || refObj.name,
+          // FIX: Use type from backend, fallback to department
+          department: refObj.type || refObj.department,
+          version: refObj.version || 'v1.0',
           status: refObj.status,
           isExpanded: false, 
           visibleLimit: 3,
           hasChildren: jsonData && jsonData.length > 0, 
           details: {
-            title: `Referenced SOP: ${refObj.name || refId}`,
+            title: `Referenced SOP: ${refObj.title || refObj.name || refId}`,
             description: 'This is a linked procedure. Expand to view its internal steps.',
-            owner: refObj.department || 'Cross-Functional',
-            updated: refObj.updated || 'Linked dynamically'
+            owner: refObj.type || refObj.department || 'Cross-Functional',
+            updated: refObj.updatedAt ? new Date(refObj.updatedAt).toLocaleDateString() : (refObj.updated || 'Linked dynamically')
           }
         }
       });
@@ -237,18 +240,19 @@ function generateFlowData(jsonData, currentSop) {
     position: { x: 0, y: 0 },
     hidden: false,
     data: {
-      label: currentSop?.name || 'Tablet Compression PM',
-      sublabel: `SOP: ${currentSop?.id || 'GFMN032'}`,
+      // FIX: Mapping backend fields for the main document
+      label: currentSop?.title || currentSop?.name || 'Tablet Compression PM',
+      sublabel: `SOP: ${currentSop?.sopId || currentSop?.id || 'GFMN032'}`,
       isExpanded: false, 
       visibleLimit: 3,
       hasChildren: jsonData && jsonData.length > 0,
       details: {
-        title: currentSop?.name || 'Preventive Maintenance of Tablet Compression Machine',
-        owner: currentSop?.department || 'Engineering & QA',
+        title: currentSop?.title || currentSop?.name || 'Preventive Maintenance of Tablet Compression Machine',
+        owner: currentSop?.type || currentSop?.department || 'Engineering & QA',
         frequency: 'Various',
-        updated: currentSop?.updated || '16/06/2021',
-        docId: currentSop?.id || 'GFMN032-09',
-        description: 'Procedure for Preventive maintenance of Tablet Compression Machine. Comply with cGMP.'
+        updated: currentSop?.updatedAt ? new Date(currentSop.updatedAt).toLocaleDateString() : (currentSop?.updated || '16/06/2021'),
+        docId: currentSop?.sopId || currentSop?.id || 'GFMN032-09',
+        description: currentSop?.description || 'Procedure for Preventive maintenance of Tablet Compression Machine. Comply with cGMP.'
       }
     },
   });

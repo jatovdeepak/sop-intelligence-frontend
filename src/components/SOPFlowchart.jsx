@@ -32,13 +32,14 @@ import { twMerge } from 'tailwind-merge';
 import structureData from './structure.json';
 import 'reactflow/dist/style.css';
 
-// Context to share the active filter state, layout direction, and action handlers
+// Context to share the active filter state, layout direction, action handlers, and tooltip state
 export const FlowContext = createContext({ 
   activeLens: 'All', 
   direction: 'TB',
   toggleNode: (id) => {},
   showMore: (id) => {},
-  expandAllFromNode: (id) => {}
+  expandAllFromNode: (id) => {},
+  setTooltip: () => {}
 });
 
 // Helper for conditional classes
@@ -378,76 +379,93 @@ const ExpandCollapseButton = ({ expanded, onClick, onExpandAll, isHorizontal, co
   </div>
 );
 
-const HoverTooltip = ({ details }) => (
-  <div className={cn(
-    "absolute w-96 bg-white rounded-2xl shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 p-5 pointer-events-none z-[100000]",
-    "left-[calc(100%+24px)] top-1/2 -translate-y-1/2",
-    "animate-in fade-in zoom-in-95 duration-200 ease-out"
-  )}>
-    <div className="relative z-10 flex flex-col">
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-[10px] flex items-center justify-center text-white mt-1 shadow-sm">
-          <Info size={22} strokeWidth={2.5} />
+// Decoupled HoverOverlay that uses absolute coordinates regardless of zoom
+const HoverTooltipOverlay = ({ tooltip }) => {
+  if (!tooltip.show || !tooltip.details) return null;
+
+  const tooltipWidth = 384; 
+  const xOffset = 24; 
+  const yOffset = 16; 
+
+  // Basic edge detection to ensure the tooltip doesn't bleed off the right edge of the screen
+  const isTooFarRight = typeof window !== 'undefined' && (tooltip.x + tooltipWidth + xOffset > window.innerWidth);
+  const finalX = isTooFarRight ? tooltip.x - tooltipWidth - xOffset : tooltip.x + xOffset;
+
+  return (
+    <div
+      className={cn(
+        "fixed bg-white rounded-2xl shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 p-5 pointer-events-none z-[100000]",
+        "animate-in fade-in duration-75 ease-out"
+      )}
+      style={{
+        width: `${tooltipWidth}px`,
+        left: finalX,
+        top: tooltip.y + yOffset,
+      }}
+    >
+      <div className="relative z-10 flex flex-col">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-[10px] flex items-center justify-center text-white mt-1 shadow-sm">
+            <Info size={22} strokeWidth={2.5} />
+          </div>
+          
+          <div className="flex flex-col pt-0.5">
+            <h4 className="font-semibold text-slate-900 text-[17px] leading-tight mb-1.5">{tooltip.details.title}</h4>
+            <p className="text-slate-500 text-[13px] leading-relaxed line-clamp-3">{tooltip.details.description}</p>
+          </div>
         </div>
         
-        <div className="flex flex-col pt-0.5">
-          <h4 className="font-semibold text-slate-900 text-[17px] leading-tight mb-1.5">{details.title}</h4>
-          <p className="text-slate-500 text-[13px] leading-relaxed line-clamp-3">{details.description}</p>
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col gap-3">
+          {tooltip.details.owner && (
+            <div className="flex items-center text-[13px]">
+              <span className="w-24 text-slate-500 font-medium">Owner:</span>
+              <span className="text-slate-700">{tooltip.details.owner}</span>
+            </div>
+          )}
+          
+          {tooltip.details.updated && (
+            <div className="flex items-center text-[13px]">
+              <span className="w-24 text-slate-500 font-medium">Updated:</span>
+              <span className="text-slate-700">{tooltip.details.updated}</span>
+            </div>
+          )}
+          
+          {(tooltip.details.documents || tooltip.details.docId) && (
+            <div className="flex items-center text-[13px]">
+              <span className="w-24 text-slate-500 font-medium">Documents:</span>
+              <span className="bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md text-xs font-semibold">
+                {tooltip.details.documents || tooltip.details.docId}
+              </span>
+            </div>
+          )}
         </div>
-      </div>
-      
-      <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col gap-3">
-        {details.owner && (
-          <div className="flex items-center text-[13px]">
-            <span className="w-24 text-slate-500 font-medium">Owner:</span>
-            <span className="text-slate-700">{details.owner}</span>
-          </div>
-        )}
-        
-        {details.updated && (
-          <div className="flex items-center text-[13px]">
-            <span className="w-24 text-slate-500 font-medium">Updated:</span>
-            <span className="text-slate-700">{details.updated}</span>
-          </div>
-        )}
-        
-        {(details.documents || details.docId) && (
-          <div className="flex items-center text-[13px]">
-            <span className="w-24 text-slate-500 font-medium">Documents:</span>
-            <span className="bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md text-xs font-semibold">
-              {details.documents || details.docId}
-            </span>
-          </div>
-        )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ============================================================================
 // 5. CUSTOM NODE COMPONENTS 
 // ============================================================================
 
 const RefNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore, expandAllFromNode } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleMouseEnter = (e) => {
-    setIsHovered(true);
-    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
-    if (nodeWrapper) nodeWrapper.style.zIndex = '99999';
+  const handleMouseEnter = () => setIsHovered(true);
+  const handleMouseMove = (e) => {
+    setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY });
   };
-
-  const handleMouseLeave = (e) => {
+  const handleMouseLeave = () => {
     setIsHovered(false);
-    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
-    if (nodeWrapper) nodeWrapper.style.zIndex = '';
+    setTooltip({ show: false, details: null, x: 0, y: 0 });
   };
 
   return (
     <div 
-      onMouseEnter={handleMouseEnter} 
+      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       className="relative transition-all duration-200 z-10"
     >
@@ -512,32 +530,28 @@ const RefNode = ({ id, data }) => {
           </button>
         )}
       </div>
-      
-      {isHovered && <HoverTooltip details={data.details} />}
     </div>
   );
 };
 
 const MainNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore, expandAllFromNode } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleMouseEnter = (e) => {
-    setIsHovered(true);
-    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
-    if (nodeWrapper) nodeWrapper.style.zIndex = '99999';
+  const handleMouseEnter = () => setIsHovered(true);
+  const handleMouseMove = (e) => {
+    setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY });
   };
-
-  const handleMouseLeave = (e) => {
+  const handleMouseLeave = () => {
     setIsHovered(false);
-    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
-    if (nodeWrapper) nodeWrapper.style.zIndex = '';
+    setTooltip({ show: false, details: null, x: 0, y: 0 });
   };
 
   return (
     <div 
       onMouseEnter={handleMouseEnter} 
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       className="relative transition-all duration-200 z-10"
     >
@@ -581,35 +595,31 @@ const MainNode = ({ id, data }) => {
           </button>
         )}
       </div>
-      
-      {isHovered && <HoverTooltip details={data.details} />}
     </div>
   );
 };
 
 const StepNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore, expandAllFromNode } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
   const primaryRole = data.roles && data.roles.length > 0 ? data.roles[0] : null;
   const topBorderColor = primaryRole ? roleBorderColors[primaryRole] : 'border-t-slate-300';
 
-  const handleMouseEnter = (e) => {
-    setIsHovered(true);
-    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
-    if (nodeWrapper) nodeWrapper.style.zIndex = '99999';
+  const handleMouseEnter = () => setIsHovered(true);
+  const handleMouseMove = (e) => {
+    setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY });
   };
-
-  const handleMouseLeave = (e) => {
+  const handleMouseLeave = () => {
     setIsHovered(false);
-    const nodeWrapper = e.currentTarget.closest('.react-flow__node');
-    if (nodeWrapper) nodeWrapper.style.zIndex = '';
+    setTooltip({ show: false, details: null, x: 0, y: 0 });
   };
 
   return (
     <div 
       onMouseEnter={handleMouseEnter} 
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       className="relative transition-all duration-200 z-10"
     >
@@ -678,8 +688,6 @@ const StepNode = ({ id, data }) => {
           </button>
         )}
       </div>
-      
-      {isHovered && <HoverTooltip details={data.details} />}
     </div>
   );
 };
@@ -698,6 +706,7 @@ function FlowchartInstance({ sop }) {
   const { rawNodes, rawEdges } = useMemo(() => generateFlowData(structureData, sop), [sop]);
   const [activeLens, setActiveLens] = useState('All');
   const [layoutDirection, setLayoutDirection] = useState('TB'); 
+  const [tooltip, setTooltip] = useState({ show: false, details: null, x: 0, y: 0 });
 
   const { nodes: initialLayoutNodes, edges: initialLayoutEdges } = useMemo(() => {
     const enriched = applyVisibility(rawNodes, rawEdges, 'All');
@@ -829,18 +838,15 @@ function FlowchartInstance({ sop }) {
     });
   }, [getEdges, setNodes, setCenter, activeLens, layoutDirection]);
 
-  // Expand all descendant nodes starting from a specific node ID
   const expandAllFromNode = useCallback((startNodeId) => {
     const currentEdges = getEdges();
     const descendants = new Set([startNodeId]);
     let added = true;
     
-    // Iteratively find all children recursively
     while (added) {
       added = false;
       currentEdges.forEach(e => {
         if (descendants.has(e.source) && !descendants.has(e.target)) {
-          // Exclude root connection if expanding a refNode so it doesn't bleed back into the main tree
           if (e.target !== 'root') { 
             descendants.add(e.target);
             added = true;
@@ -864,7 +870,6 @@ function FlowchartInstance({ sop }) {
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
   }, [getEdges, setNodes, fitView, activeLens, layoutDirection]);
 
-  // Global Expand All only triggers on the main 'root' node now
   const handleExpandAll = useCallback(() => {
     expandAllFromNode('root');
   }, [expandAllFromNode]);
@@ -890,8 +895,8 @@ function FlowchartInstance({ sop }) {
   return (
     <div className="w-full h-full bg-slate-50 relative flex font-sans overflow-hidden">
       
-      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, toggleNode, showMore, expandAllFromNode }}>
-        <div className="flex-1 h-full p-6">
+      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, toggleNode, showMore, expandAllFromNode, setTooltip }}>
+        <div className="flex-1 h-full p-6 relative">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -920,6 +925,9 @@ function FlowchartInstance({ sop }) {
               showInteractive={false} 
             />
           </ReactFlow>
+
+          {/* Renders outside the zooming ReactFlow canvas so size stays constant! */}
+          <HoverTooltipOverlay tooltip={tooltip} />
         </div>
       </FlowContext.Provider>
 

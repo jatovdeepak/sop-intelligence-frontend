@@ -994,7 +994,7 @@ export default function SOPFlowchart({ sop, onClose }) {
           </div>
           <div>
             <h1 className="text-slate-800 font-bold text-base whitespace-nowrap">
-              Process Flow: {sop?.name || 'SOP Flow Map'}
+              Process Flow: {sop?.title || 'SOP Flow Map'}
             </h1>
             <p className="text-slate-500 text-xs font-medium whitespace-nowrap">
               Top-Down / Left-Right View

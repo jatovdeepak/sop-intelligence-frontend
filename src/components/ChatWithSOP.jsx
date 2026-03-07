@@ -258,7 +258,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                         <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-800 flex flex-col gap-1.5">
                           <div className="flex items-center gap-1.5 font-semibold">
                             <CheckCircle className="w-4 h-4 text-emerald-600" />
-                            Verified by Admin
+                            Verified by Expert
                           </div>
                           {msg.adminComment && (
                             <p className="text-emerald-700 mt-1">
@@ -270,14 +270,14 @@ export default function ChatWithSOP({ sop, onClose }) {
 
                       <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2">
                         <div className="text-xs text-slate-500">
-                          {msg.source === "cache" ? "⚡ Answered from Cache" : "🤖 AI Generated"}
+                          {msg.source === "cache" ? "⚡ Answered from Cache" : ""}
                         </div>
-                        <button 
+                        {/* <button 
                           onClick={() => copyToClipboard(msg.content)}
                           className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition-colors"
                         >
                           <Copy className="h-4 w-4" /> Copy
-                        </button>
+                        </button> */}
                       </div>
                     </div>
                   )
@@ -311,14 +311,15 @@ export default function ChatWithSOP({ sop, onClose }) {
         <div className="border-t px-6 py-3 bg-white">
           <div className="mb-2 text-sm text-slate-500">Suggestions:</div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => handleAsk("What are the key steps in this SOP?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
-              What are the key steps in this SOP?
+            <button onClick={() => handleAsk("give all points of Monthly Preventive Maintenance.")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
+            give all points of Monthly Preventive Maintenance.
             </button>
-            <button onClick={() => handleAsk("Who is responsible for this procedure?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
-              Who is responsible for this procedure?
+            <button onClick={() => handleAsk("How do I check the turret for free rotation?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
+            How do I check the turret for free rotation?
             </button>
-            <button onClick={() => handleAsk("What are the critical quality checkpoints?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
-              What are the critical quality checkpoints?
+            <button onClick={() => handleAsk("What is the monthly maintenance for the drive gearbox oil?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
+            What is the monthly maintenance for the drive gearbox oil?
+
             </button>
           </div>
         </div>

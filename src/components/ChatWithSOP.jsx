@@ -1,7 +1,46 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Globe, Copy, HelpCircle, ArrowRight, CheckCircle, Sparkles } from "lucide-react";
+import { X, Send, Globe, Copy, HelpCircle, ArrowRight, CheckCircle, Sparkles, Image as ImageIcon, Video } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+// Helper function to safely extract the YouTube video ID and create an embed URL
+const getYouTubeEmbedUrl = (url) => {
+  try {
+    const urlObj = new URL(url);
+    let videoId = "";
+    
+    if (urlObj.hostname.includes("youtube.com")) {
+      videoId = urlObj.searchParams.get("v");
+    } else if (urlObj.hostname.includes("youtu.be")) {
+      videoId = urlObj.pathname.slice(1);
+    }
+
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+  } catch (e) {
+    console.error("Invalid YouTube URL", e);
+  }
+  return url; // Fallback to the original URL if parsing fails
+};
+
+// Helper function to convert Google Drive view links to embeddable preview links (for ALL Drive media)
+const getDriveEmbedUrl = (url) => {
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname.includes("drive.google.com")) {
+      const parts = urlObj.pathname.split('/');
+      const dIndex = parts.indexOf('d');
+      if (dIndex !== -1 && parts.length > dIndex + 1) {
+        const fileId = parts[dIndex + 1];
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+      }
+    }
+  } catch (e) {
+    console.error("Invalid Drive URL", e);
+  }
+  return url;
+};
 
 export default function ChatWithSOP({ sop, onClose }) {
   console.log("sop", sop);
@@ -56,7 +95,8 @@ export default function ChatWithSOP({ sop, onClose }) {
               content: item.answer, 
               source: item.source,
               isApproved: item.is_approved,     
-              adminComment: item.admin_comment 
+              adminComment: item.admin_comment,
+              media: item.media || [] 
             });
           }
         });
@@ -91,8 +131,6 @@ export default function ChatWithSOP({ sop, onClose }) {
           user_id: userId,
           question: currentQuestion,
           skip_cache: skipCache,
-          // Optional: If your backend needs to know WHICH sop to search, pass it here:
-          // sop_id: sop?.id 
         }),
       });
 
@@ -126,6 +164,7 @@ export default function ChatWithSOP({ sop, onClose }) {
             source: data.source || "rag",
             isApproved: data.is_approved || false,
             adminComment: data.admin_comment || "",
+            media: data.media || [], 
             timestamp: new Date()
           },
         ]);
@@ -144,11 +183,6 @@ export default function ChatWithSOP({ sop, onClose }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    // Optional: Add a small toast notification here
   };
 
   const formatTime = (date) => {
@@ -205,7 +239,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               }`}
             >
               <div
-                className={`max-w-[70%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                   msg.role === "user"
                     ? "bg-orange-500 text-white"
                     : "bg-slate-100 text-slate-800"
@@ -240,19 +274,120 @@ export default function ChatWithSOP({ sop, onClose }) {
                     </div>
                   ) : (
                     // Answer Bubble
-                    <div>
+                    <div className="w-full">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 mb-2">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 mb-2">{children}</ol>,
+                          p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-5 space-y-2 mb-4">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-5 space-y-2 mb-4">{children}</ol>,
                           li: ({ children }) => <li>{children}</li>,
-                          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                          strong: ({ children }) => <strong className="font-semibold text-slate-800">{children}</strong>,
+                          img: ({ src, alt }) => {
+                            const isYouTube = src.includes("youtu.be") || src.includes("youtube.com");
+                            const isDrive = src.includes("drive.google.com");
+                            
+                            // 1. IFRAME RENDERER (For YouTube, Drive Videos, AND Drive Images)
+                            if (alt === 'VIDEO' || isYouTube || isDrive) {
+                              return (
+                                <div className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-lg shadow-sm">
+                                  {isYouTube ? (
+                                    <iframe 
+                                      src={getYouTubeEmbedUrl(src)} 
+                                      className="w-full aspect-video bg-black" 
+                                      allowFullScreen 
+                                    />
+                                  ) : isDrive ? (
+                                    <iframe 
+                                      src={getDriveEmbedUrl(src)} 
+                                      className="w-full h-[300px] bg-white" 
+                                      allow="autoplay"
+                                      allowFullScreen 
+                                    />
+                                  ) : (
+                                    <video src={src} controls className="w-full max-h-[300px] object-contain bg-black" />
+                                  )}
+                                  <div className="p-2 text-xs text-slate-500 bg-slate-100 border-t flex items-center justify-between font-medium">
+                                    <div className="flex items-center gap-1.5">
+                                      {alt === 'VIDEO' || isYouTube ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />} 
+                                      {alt === 'VIDEO' || isYouTube ? 'Related Video' : 'Google Drive Media'}
+                                    </div>
+                                    <a href={src} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">
+                                      Open
+                                    </a>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            // 2. STANDARD IMAGE RENDERER (For normal web images)
+                            return (
+                              <div className="my-4 max-w-lg">
+                                <img src={src} alt={alt} className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[400px]" />
+                                {alt && alt !== 'image' && alt !== 'Image' && alt !== 'None' && (
+                                  <div className="mt-1.5 text-xs text-slate-500 text-center italic">{alt}</div>
+                                )}
+                              </div>
+                            );
+                          }
                         }}
                       >
                         {msg.content}
                       </ReactMarkdown>
+
+                      {/* --- FALLBACK MEDIA GALLERY --- */}
+                      {msg.media && (
+                        (() => {
+                          const unusedMedia = msg.media.filter(m => !msg.content.includes(m.url));
+                          if (unusedMedia.length === 0) return null;
+
+                          return (
+                            <div className="mt-4 border-t border-slate-200 pt-3">
+                              <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Additional Resources</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {unusedMedia.map((m, idx) => {
+                                  const isYouTube = m.url.includes("youtu.be") || m.url.includes("youtube.com");
+                                  const isDrive = m.url.includes("drive.google.com");
+                                  
+                                  return (
+                                    <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col">
+                                      {m.type === 'video' || isYouTube || isDrive ? (
+                                        <div className="relative pt-[56.25%] bg-slate-50">
+                                          {isYouTube ? (
+                                            <iframe src={getYouTubeEmbedUrl(m.url)} className="absolute inset-0 w-full h-full bg-black" allowFullScreen />
+                                          ) : isDrive ? (
+                                            <iframe src={getDriveEmbedUrl(m.url)} className="absolute inset-0 w-full h-full bg-white" allow="autoplay" allowFullScreen />
+                                          ) : (
+                                            <video src={m.url} controls className="absolute inset-0 w-full h-full object-contain bg-black" />
+                                          )}
+                                          <div className="absolute top-2 right-2 bg-black/60 p-1 rounded backdrop-blur-sm pointer-events-none">
+                                            {m.type === 'video' || isYouTube ? <Video className="w-4 h-4 text-white" /> : <ImageIcon className="w-4 h-4 text-white" />}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        // Standard image fallback
+                                        <div className="relative group cursor-pointer" onClick={() => window.open(m.url, '_blank')}>
+                                          <img src={m.url} alt={m.caption || 'SOP Reference'} className="w-full h-40 object-cover hover:opacity-90 transition-opacity" />
+                                          <div className="absolute top-2 right-2 bg-black/60 p-1 rounded backdrop-blur-sm">
+                                            <ImageIcon className="w-4 h-4 text-white" />
+                                          </div>
+                                        </div>
+                                      )}
+                                      {m.caption && m.caption !== 'None' && (
+                                        <div className="p-2 text-xs text-slate-600 bg-slate-50 flex-1 border-t border-slate-100 flex justify-between items-center">
+                                          <span className="truncate mr-2">{m.caption}</span>
+                                          {isDrive && <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline flex-shrink-0">Open</a>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
+                      {/* ----------------------------- */}
 
                       {msg.isApproved && (
                         <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-800 flex flex-col gap-1.5">
@@ -272,12 +407,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                         <div className="text-xs text-slate-500">
                           {msg.source === "cache" ? "⚡ Answered from Cache" : ""}
                         </div>
-                        {/* <button 
-                          onClick={() => copyToClipboard(msg.content)}
-                          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition-colors"
-                        >
-                          <Copy className="h-4 w-4" /> Copy
-                        </button> */}
                       </div>
                     </div>
                   )
@@ -316,10 +445,6 @@ export default function ChatWithSOP({ sop, onClose }) {
             </button>
             <button onClick={() => handleAsk("How do I check the turret for free rotation?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
             How do I check the turret for free rotation?
-            </button>
-            <button onClick={() => handleAsk("What is the monthly maintenance for the drive gearbox oil?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
-            What is the monthly maintenance for the drive gearbox oil?
-
             </button>
           </div>
         </div>

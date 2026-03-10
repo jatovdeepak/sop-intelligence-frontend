@@ -33,42 +33,41 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import 'reactflow/dist/style.css';
 
-// Context to share the active filter state, layout direction, action handlers, and tooltip state
+// Context to share the active filter state, layout direction, action handlers, tooltip state, and color map
 export const FlowContext = createContext({ 
   activeLens: 'All', 
   direction: 'TB',
+  colorMap: {},
   toggleNode: (id) => {},
   showMore: (id) => {},
   expandAllFromNode: (id) => {},
   setTooltip: () => {}
 });
 
-// Helper for conditional classes
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-// Role Color Mapping Configuration
-const roleColors = {
-  'Technician - Eng': 'bg-blue-50 text-blue-700 border-blue-200',
-  'Executive - Eng': 'bg-purple-50 text-purple-700 border-purple-200',
-  'Head - Eng': 'bg-amber-50 text-amber-700 border-amber-200',
-  'IPQA': 'bg-emerald-50 text-emerald-700 border-emerald-200'
+// Dynamic Color Palette Mapping
+const COLOR_PALETTE = {
+  blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', topBorder: 'border-t-blue-500' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', topBorder: 'border-t-purple-500' },
+  amber: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', topBorder: 'border-t-amber-500' },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', topBorder: 'border-t-emerald-500' },
+  rose: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', topBorder: 'border-t-rose-500' },
+  cyan: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', topBorder: 'border-t-cyan-500' },
+  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', topBorder: 'border-t-indigo-500' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', topBorder: 'border-t-orange-500' },
+  gray: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', topBorder: 'border-t-gray-500' },
 };
 
-const roleBorderColors = {
-  'Technician - Eng': 'border-t-blue-500',
-  'Executive - Eng': 'border-t-purple-500',
-  'Head - Eng': 'border-t-amber-500',
-  'IPQA': 'border-t-emerald-500'
-};
+const DEFAULT_COLOR = { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', topBorder: 'border-t-slate-300' };
 
 // ============================================================================
 // 2. DAGRE DYNAMIC AUTO-LAYOUT ENGINE
 // ============================================================================
 
 const NODE_WIDTH = 320; 
-// Keep height comfortable enough to prevent link overlap when media is present
 const NODE_HEIGHT = 280; 
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
@@ -119,35 +118,29 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 // 3. DATA GENERATOR & ENRICHMENT
 // ============================================================================
 
-function determineRoles(item) {
+function determineRoles(item, filters = []) {
   const roles = [];
   const lowerText = `${item.title || ''} ${item.content || ''}`.toLowerCase();
   const id = String(item.id);
 
-  if (lowerText.includes('ipqa') || lowerText.includes('qa') || lowerText.includes('cgmp') || id === '3.4' || id === '5.5') {
-    roles.push('IPQA');
-  }
-  if (lowerText.includes('head') || lowerText.includes('designee') || id === '3.3' || id === '5.6') {
-    roles.push('Head - Eng');
-  }
-  if (lowerText.includes('executive') || lowerText.includes('train') || lowerText.includes('monitor') || lowerText.includes('superior') || id === '3.2' || id === '5.5' || id === '5.6') {
-    roles.push('Executive - Eng');
-  }
-  if (lowerText.includes('technician') || id.startsWith('5.') || id === '5.0' || id === '3.1') {
-    roles.push('Technician - Eng');
-  }
+  filters.forEach(filter => {
+    // If ANY of the keywords match the ID exactly, or if the text includes it
+    const hasMatch = filter.keywords.some(kw => {
+      const kwLower = kw.toLowerCase().trim();
+      return id === kwLower || id.startsWith(kwLower) || lowerText.includes(kwLower);
+    });
+
+    if (hasMatch) {
+      roles.push(filter.label);
+    }
+  });
+
   return [...new Set(roles)];
 }
 
-function generateFlowData(jsonData, currentSop) {
+function generateFlowData(jsonData, currentSop, filters = []) {
   const nodes = [];
   const edges = [];
-
-  const getMetaValue = (key) => {
-    if (!currentSop?.data?.metadata) return null;
-    const meta = currentSop.data.metadata.find(m => m.key === key);
-    return meta ? meta.value : null;
-  };
 
   const traverse = (items, parentId, depth, idPrefix = '') => {
     if (!items || !Array.isArray(items)) return;
@@ -169,7 +162,7 @@ function generateFlowData(jsonData, currentSop) {
         data: {
           label: fallbackLabel, 
           sublabel: shortContent,
-          roles: determineRoles(item),
+          roles: determineRoles(item, filters),
           media: item.media || [], 
           isDimmed: false,
           isExpanded: false, 
@@ -179,9 +172,9 @@ function generateFlowData(jsonData, currentSop) {
             description: cleanContent || `Refer to section ${item.id} documentation.`,
             action: item.children && item.children.length > 0 ? 'Expand for steps' : 'Execute Step',
             criticality: item.id.startsWith('5.') ? 'High' : 'Normal',
-            owner: 'Tech Team', 
-            updated: getMetaValue("Effective Date") || 'N/A', 
-            documents: getMetaValue("SOP No.") || 'N/A' 
+            owner: currentSop?.ownerSystem || 'Tech Team', 
+            updated: currentSop?.updatedAt ? new Date(currentSop.updatedAt).toLocaleDateString() : 'N/A', 
+            documents: currentSop?.sopId || 'N/A' 
           }
         },
       });
@@ -201,6 +194,7 @@ function generateFlowData(jsonData, currentSop) {
     });
   };
 
+  // Process reference objects if any
   if (currentSop && currentSop.referenceObjects && Array.isArray(currentSop.referenceObjects)) {
     currentSop.referenceObjects.forEach((refObj) => {
       const refId = refObj.sopId || refObj.id; 
@@ -243,9 +237,9 @@ function generateFlowData(jsonData, currentSop) {
     });
   }
 
-  const rootTitle = getMetaValue("SOP Title") || currentSop?.title || currentSop?.name || 'Standard Operating Procedure';
-  const rootId = getMetaValue("SOP No.") || currentSop?.sopId || currentSop?.id || 'Unknown';
-  const rootUpdated = getMetaValue("Effective Date") || (currentSop?.updatedAt ? new Date(currentSop.updatedAt).toLocaleDateString() : 'Unknown Date');
+  const rootTitle = currentSop?.title || 'Standard Operating Procedure';
+  const rootId = currentSop?.sopId || 'Unknown';
+  const rootUpdated = currentSop?.updatedAt ? new Date(currentSop.updatedAt).toLocaleDateString() : 'Unknown Date';
 
   nodes.push({
     id: 'root',
@@ -260,8 +254,8 @@ function generateFlowData(jsonData, currentSop) {
       hasChildren: jsonData && jsonData.length > 0,
       details: {
         title: rootTitle,
-        owner: currentSop?.type || currentSop?.department || 'Cross-Functional',
-        frequency: getMetaValue("Review Date") ? `Review: ${getMetaValue("Review Date")}` : 'Various',
+        owner: currentSop?.type || currentSop?.ownerSystem || 'Cross-Functional',
+        frequency: 'Various',
         updated: rootUpdated,
         docId: rootId,
         description: currentSop?.description || `Root document for ${rootTitle}`
@@ -467,20 +461,11 @@ const RefNode = ({ id, data }) => {
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleMouseEnter = () => setIsHovered(true);
-  const handleMouseMove = (e) => {
-    setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY });
-  };
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    setTooltip({ show: false, details: null, x: 0, y: 0 });
-  };
-
   return (
     <div 
-      onMouseEnter={handleMouseEnter}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseMove={(e) => setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => { setIsHovered(false); setTooltip({ show: false, details: null, x: 0, y: 0 }); }}
       className="relative transition-all duration-200 z-10"
     >
       <div className={cn(
@@ -553,20 +538,11 @@ const MainNode = ({ id, data }) => {
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleMouseEnter = () => setIsHovered(true);
-  const handleMouseMove = (e) => {
-    setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY });
-  };
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    setTooltip({ show: false, details: null, x: 0, y: 0 });
-  };
-
   return (
     <div 
-      onMouseEnter={handleMouseEnter} 
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={() => setIsHovered(true)} 
+      onMouseMove={(e) => setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => { setIsHovered(false); setTooltip({ show: false, details: null, x: 0, y: 0 }); }}
       className="relative transition-all duration-200 z-10"
     >
       <div className={cn(
@@ -614,32 +590,24 @@ const MainNode = ({ id, data }) => {
 };
 
 const StepNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip, colorMap } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
 
+  // Look up dynamic colors for tags
   const primaryRole = data.roles && data.roles.length > 0 ? data.roles[0] : null;
-  const topBorderColor = primaryRole ? roleBorderColors[primaryRole] : 'border-t-slate-300';
-
-  const handleMouseEnter = () => setIsHovered(true);
-  const handleMouseMove = (e) => {
-    setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY });
-  };
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    setTooltip({ show: false, details: null, x: 0, y: 0 });
-  };
-
+  const primaryColorData = primaryRole && colorMap[primaryRole] ? colorMap[primaryRole] : DEFAULT_COLOR;
+  
   return (
     <div 
-      onMouseEnter={handleMouseEnter} 
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={() => setIsHovered(true)} 
+      onMouseMove={(e) => setTooltip({ show: true, details: data.details, x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => { setIsHovered(false); setTooltip({ show: false, details: null, x: 0, y: 0 }); }}
       className="relative transition-all duration-200 z-10"
     >
       <div className={cn(
         "w-72 p-4 rounded-xl shadow-sm border-x border-b border-t-4 transition-all duration-300 bg-white",
-        topBorderColor,
+        primaryColorData.topBorder,
         data.isDimmed ? "opacity-30 grayscale saturate-0 scale-95" : "opacity-100",
         isHovered && !data.isDimmed ? "ring-2 ring-blue-500/20 shadow-md scale-[1.02]" : "hover:shadow-md",
       )}>
@@ -670,7 +638,6 @@ const StepNode = ({ id, data }) => {
         {data.media && data.media.length > 0 && (
           <div className="mb-3 flex gap-2 overflow-x-auto pb-1.5 nodrag [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-track]:bg-slate-100">
             {data.media.map((item, idx) => {
-              
               if (item.type === 'image') {
                 return (
                   <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block cursor-pointer">
@@ -687,13 +654,11 @@ const StepNode = ({ id, data }) => {
                   </a>
                 );
               } 
-              
               if (item.type === 'video') {
                 const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
                 const isDrive = item.url.includes('drive.google.com');
 
                 if (isYouTube) {
-                  // Extract YouTube ID to show thumbnail
                   const ytId = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1];
                   const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
 
@@ -717,7 +682,6 @@ const StepNode = ({ id, data }) => {
                     </a>
                   );
                 } 
-                
                 if (isDrive) {
                   return (
                     <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer flex flex-col items-center justify-center p-2 text-center">
@@ -729,8 +693,6 @@ const StepNode = ({ id, data }) => {
                     </a>
                   );
                 } 
-                
-                // Fallback: Native HTML5 Video Element for direct video files (e.g. mp4)
                 return (
                   <div key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-black group">
                     <video 
@@ -747,7 +709,6 @@ const StepNode = ({ id, data }) => {
                   </div>
                 );
               }
-              
               return null;
             })}
           </div>
@@ -756,14 +717,17 @@ const StepNode = ({ id, data }) => {
 
         {data.roles && data.roles.length > 0 && (
            <div className="flex flex-wrap gap-1 mb-2">
-             {data.roles.map(r => (
-               <span key={r} className={cn(
-                 "text-[9px] px-2 py-0.5 rounded-full whitespace-nowrap font-medium border",
-                 roleColors[r] || "bg-slate-100 text-slate-600 border-slate-200"
-               )}>
-                 {r}
-               </span>
-             ))}
+             {data.roles.map(r => {
+               const cData = colorMap[r] || DEFAULT_COLOR;
+               return (
+                 <span key={r} className={cn(
+                   "text-[9px] px-2 py-0.5 rounded-full whitespace-nowrap font-medium border",
+                   cData.bg, cData.text, cData.border
+                 )}>
+                   {r}
+                 </span>
+               );
+             })}
            </div>
         )}
 
@@ -805,10 +769,26 @@ const nodeTypes = {
 // ============================================================================
 
 function FlowchartInstance({ sop }) {
+  const filtersList = sop?.data?.filters || [];
+
+  // Generate dynamic color map from the filters
+  const colorMap = useMemo(() => {
+    const map = {};
+    filtersList.forEach(f => {
+      map[f.label] = COLOR_PALETTE[f.color] || DEFAULT_COLOR;
+    });
+    return map;
+  }, [filtersList]);
+
+  // Generate node lenses derived strictly from actual filter data
+  const lensOptions = useMemo(() => {
+    return ['All', ...filtersList.map(f => f.label)];
+  }, [filtersList]);
+
   const { rawNodes, rawEdges } = useMemo(() => {
     const sections = sop?.data?.sections || [];
-    return generateFlowData(sections, sop);
-  }, [sop]);
+    return generateFlowData(sections, sop, filtersList);
+  }, [sop, filtersList]);
   
   const [activeLens, setActiveLens] = useState('All');
   const [layoutDirection, setLayoutDirection] = useState('TB'); 
@@ -994,14 +974,10 @@ function FlowchartInstance({ sop }) {
     setTimeout(() => fitView({ duration: 600, padding: 0.2, maxZoom: 1 }), 50);
   }, [getEdges, setNodes, fitView, activeLens, layoutDirection]);
 
-  const lensOptions = [
-    'All', 'Technician - Eng', 'Executive - Eng', 'Head - Eng', 'IPQA'
-  ];
-
   return (
     <div className="w-full h-full bg-slate-50 relative flex font-sans overflow-hidden">
       
-      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, toggleNode, showMore, expandAllFromNode, setTooltip }}>
+      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, colorMap, toggleNode, showMore, expandAllFromNode, setTooltip }}>
         <div className="flex-1 h-full p-6 relative">
           <ReactFlow
             nodes={nodes}
@@ -1090,13 +1066,7 @@ function FlowchartInstance({ sop }) {
 }
 
 export default function SOPFlowchart({ sop, onClose }) {
-  const getMetaValue = (key) => {
-    if (!sop?.data?.metadata) return null;
-    const meta = sop.data.metadata.find(m => m.key === key);
-    return meta ? meta.value : null;
-  };
-
-  const headerTitle = getMetaValue("SOP Title") || sop?.title || 'SOP Flow Map';
+  const headerTitle = sop?.title || 'SOP Flow Map';
 
   return (
     <div className="relative w-full max-w-[95vw] h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden pointer-events-auto">

@@ -23,13 +23,14 @@ import {
   ChevronsUp,
   X,
   LayoutTemplate,
-  Info
+  Info,
+  Image as ImageIcon,
+  Play,
+  Video,
+  ExternalLink
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-
-// 1. IMPORT THE JSON STRUCTURE
-import structureData from './structure.json';
 import 'reactflow/dist/style.css';
 
 // Context to share the active filter state, layout direction, action handlers, and tooltip state
@@ -67,7 +68,8 @@ const roleBorderColors = {
 // ============================================================================
 
 const NODE_WIDTH = 320; 
-const NODE_HEIGHT = 180; 
+// Keep height comfortable enough to prevent link overlap when media is present
+const NODE_HEIGHT = 280; 
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
@@ -119,7 +121,7 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
 function determineRoles(item) {
   const roles = [];
-  const lowerText = `${item.title} ${item.content}`.toLowerCase();
+  const lowerText = `${item.title || ''} ${item.content || ''}`.toLowerCase();
   const id = String(item.id);
 
   if (lowerText.includes('ipqa') || lowerText.includes('qa') || lowerText.includes('cgmp') || id === '3.4' || id === '5.5') {
@@ -141,14 +143,23 @@ function generateFlowData(jsonData, currentSop) {
   const nodes = [];
   const edges = [];
 
+  const getMetaValue = (key) => {
+    if (!currentSop?.data?.metadata) return null;
+    const meta = currentSop.data.metadata.find(m => m.key === key);
+    return meta ? meta.value : null;
+  };
+
   const traverse = (items, parentId, depth, idPrefix = '') => {
+    if (!items || !Array.isArray(items)) return;
+
     items.forEach((item) => {
-      const cleanTitle = item.title.trim();
+      const cleanTitle = (item.title || '').trim();
       const shortTitle = cleanTitle.length > 40 ? cleanTitle.substring(0, 40) + '...' : cleanTitle;
-      const cleanContent = item.content.trim();
+      const cleanContent = (item.content || '').trim();
       const shortContent = cleanContent ? (cleanContent.length > 65 ? cleanContent.substring(0, 65) + '...' : cleanContent) : '';
 
       const uniqueId = idPrefix ? `${idPrefix}-${item.id}` : item.id;
+      const fallbackLabel = shortTitle ? `${item.id} - ${shortTitle}` : `Section ${item.id}`;
 
       nodes.push({
         id: uniqueId,
@@ -156,20 +167,21 @@ function generateFlowData(jsonData, currentSop) {
         position: { x: 0, y: 0 }, 
         hidden: true, 
         data: {
-          label: `${item.id} - ${shortTitle}`, 
+          label: fallbackLabel, 
           sublabel: shortContent,
           roles: determineRoles(item),
+          media: item.media || [], 
           isDimmed: false,
           isExpanded: false, 
           visibleLimit: 3,   
           details: {
-            title: cleanTitle,
+            title: cleanTitle || `Section ${item.id}`,
             description: cleanContent || `Refer to section ${item.id} documentation.`,
             action: item.children && item.children.length > 0 ? 'Expand for steps' : 'Execute Step',
             criticality: item.id.startsWith('5.') ? 'High' : 'Normal',
             owner: 'Tech Team', 
-            updated: '2025-11-16', 
-            documents: 'CAL-FORM-001' 
+            updated: getMetaValue("Effective Date") || 'N/A', 
+            documents: getMetaValue("SOP No.") || 'N/A' 
           }
         },
       });
@@ -231,24 +243,28 @@ function generateFlowData(jsonData, currentSop) {
     });
   }
 
+  const rootTitle = getMetaValue("SOP Title") || currentSop?.title || currentSop?.name || 'Standard Operating Procedure';
+  const rootId = getMetaValue("SOP No.") || currentSop?.sopId || currentSop?.id || 'Unknown';
+  const rootUpdated = getMetaValue("Effective Date") || (currentSop?.updatedAt ? new Date(currentSop.updatedAt).toLocaleDateString() : 'Unknown Date');
+
   nodes.push({
     id: 'root',
     type: 'mainNode',
     position: { x: 0, y: 0 },
     hidden: false,
     data: {
-      label: currentSop?.title || currentSop?.name || 'Tablet Compression PM',
-      sublabel: `SOP: ${currentSop?.sopId || currentSop?.id || 'GFMN032'}`,
+      label: rootTitle,
+      sublabel: `SOP: ${rootId}`,
       isExpanded: false, 
       visibleLimit: 3,
       hasChildren: jsonData && jsonData.length > 0,
       details: {
-        title: currentSop?.title || currentSop?.name || 'Preventive Maintenance of Tablet Compression Machine',
-        owner: currentSop?.type || currentSop?.department || 'Engineering & QA',
-        frequency: 'Various',
-        updated: currentSop?.updatedAt ? new Date(currentSop.updatedAt).toLocaleDateString() : (currentSop?.updated || '16/06/2021'),
-        docId: currentSop?.sopId || currentSop?.id || 'GFMN032-09',
-        description: currentSop?.description || 'Procedure for Preventive maintenance of Tablet Compression Machine. Comply with cGMP.'
+        title: rootTitle,
+        owner: currentSop?.type || currentSop?.department || 'Cross-Functional',
+        frequency: getMetaValue("Review Date") ? `Review: ${getMetaValue("Review Date")}` : 'Various',
+        updated: rootUpdated,
+        docId: rootId,
+        description: currentSop?.description || `Root document for ${rootTitle}`
       }
     },
   });
@@ -379,7 +395,6 @@ const ExpandCollapseButton = ({ expanded, onClick, onExpandAll, isHorizontal, co
   </div>
 );
 
-// Decoupled HoverOverlay that uses absolute coordinates regardless of zoom
 const HoverTooltipOverlay = ({ tooltip }) => {
   if (!tooltip.show || !tooltip.details) return null;
 
@@ -387,7 +402,6 @@ const HoverTooltipOverlay = ({ tooltip }) => {
   const xOffset = 24; 
   const yOffset = 16; 
 
-  // Basic edge detection to ensure the tooltip doesn't bleed off the right edge of the screen
   const isTooFarRight = typeof window !== 'undefined' && (tooltip.x + tooltipWidth + xOffset > window.innerWidth);
   const finalX = isTooFarRight ? tooltip.x - tooltipWidth - xOffset : tooltip.x + xOffset;
 
@@ -652,6 +666,94 @@ const StepNode = ({ id, data }) => {
           <p className="text-slate-500 text-xs mb-3 leading-relaxed line-clamp-2">{data.sublabel}</p>
         )}
 
+        {/* --- SCROLLABLE MEDIA GALLERY --- */}
+        {data.media && data.media.length > 0 && (
+          <div className="mb-3 flex gap-2 overflow-x-auto pb-1.5 nodrag [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-track]:bg-slate-100">
+            {data.media.map((item, idx) => {
+              
+              if (item.type === 'image') {
+                return (
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block cursor-pointer">
+                    <img 
+                      src={item.url} 
+                      alt={item.caption || `Image ${idx + 1}`} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-slate-100" 
+                    />
+                    {item.caption && (
+                      <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-1 truncate">
+                        {item.caption}
+                      </div>
+                    )}
+                  </a>
+                );
+              } 
+              
+              if (item.type === 'video') {
+                const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+                const isDrive = item.url.includes('drive.google.com');
+
+                if (isYouTube) {
+                  // Extract YouTube ID to show thumbnail
+                  const ytId = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1];
+                  const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+
+                  return (
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-slate-900 cursor-pointer">
+                      {thumbUrl ? (
+                        <img src={thumbUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" alt="Video Thumbnail" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                          <Video size={24} className="text-slate-400" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                         <div className="bg-red-600 text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                           <Play fill="currentColor" size={14} className="ml-0.5" />
+                         </div>
+                      </div>
+                      <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate">
+                        {item.caption || 'YouTube Video'}
+                      </div>
+                    </a>
+                  );
+                } 
+                
+                if (isDrive) {
+                  return (
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer flex flex-col items-center justify-center p-2 text-center">
+                      <div className="bg-blue-600 text-white rounded-full p-2 shadow-sm group-hover:scale-110 transition-transform mb-1.5">
+                        <ExternalLink size={14} />
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-800">Drive Link</span>
+                      {item.caption && <span className="text-[9px] text-blue-600/80 w-full truncate">{item.caption}</span>}
+                    </a>
+                  );
+                } 
+                
+                // Fallback: Native HTML5 Video Element for direct video files (e.g. mp4)
+                return (
+                  <div key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-black group">
+                    <video 
+                      src={item.url} 
+                      controls 
+                      preload="metadata"
+                      className="w-full h-full object-cover"
+                    />
+                    {item.caption && (
+                      <div className="absolute top-0 w-full bg-gradient-to-b from-black/80 to-transparent text-white text-[9px] px-1.5 py-1 pb-3 truncate z-10 pointer-events-none">
+                        {item.caption}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              
+              return null;
+            })}
+          </div>
+        )}
+        {/* ---------------------------------- */}
+
         {data.roles && data.roles.length > 0 && (
            <div className="flex flex-wrap gap-1 mb-2">
              {data.roles.map(r => (
@@ -703,7 +805,11 @@ const nodeTypes = {
 // ============================================================================
 
 function FlowchartInstance({ sop }) {
-  const { rawNodes, rawEdges } = useMemo(() => generateFlowData(structureData, sop), [sop]);
+  const { rawNodes, rawEdges } = useMemo(() => {
+    const sections = sop?.data?.sections || [];
+    return generateFlowData(sections, sop);
+  }, [sop]);
+  
   const [activeLens, setActiveLens] = useState('All');
   const [layoutDirection, setLayoutDirection] = useState('TB'); 
   const [tooltip, setTooltip] = useState({ show: false, details: null, x: 0, y: 0 });
@@ -926,7 +1032,6 @@ function FlowchartInstance({ sop }) {
             />
           </ReactFlow>
 
-          {/* Renders outside the zooming ReactFlow canvas so size stays constant! */}
           <HoverTooltipOverlay tooltip={tooltip} />
         </div>
       </FlowContext.Provider>
@@ -985,6 +1090,14 @@ function FlowchartInstance({ sop }) {
 }
 
 export default function SOPFlowchart({ sop, onClose }) {
+  const getMetaValue = (key) => {
+    if (!sop?.data?.metadata) return null;
+    const meta = sop.data.metadata.find(m => m.key === key);
+    return meta ? meta.value : null;
+  };
+
+  const headerTitle = getMetaValue("SOP Title") || sop?.title || 'SOP Flow Map';
+
   return (
     <div className="relative w-full max-w-[95vw] h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden pointer-events-auto">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white z-20 shrink-0">
@@ -994,7 +1107,7 @@ export default function SOPFlowchart({ sop, onClose }) {
           </div>
           <div>
             <h1 className="text-slate-800 font-bold text-base whitespace-nowrap">
-              Process Flow: {sop?.title || 'SOP Flow Map'}
+              Process Flow: {headerTitle}
             </h1>
             <p className="text-slate-500 text-xs font-medium whitespace-nowrap">
               Top-Down / Left-Right View

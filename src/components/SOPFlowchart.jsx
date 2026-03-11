@@ -36,6 +36,24 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import 'reactflow/dist/style.css';
 
+// --- HELPER FUNCTION FOR GOOGLE DRIVE ---
+const getDriveEmbedUrl = (url) => {
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname.includes("drive.google.com")) {
+      const parts = urlObj.pathname.split('/');
+      const dIndex = parts.indexOf('d');
+      if (dIndex !== -1 && parts.length > dIndex + 1) {
+        const fileId = parts[dIndex + 1];
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+      }
+    }
+  } catch (e) {
+    console.error("Invalid Drive URL", e);
+  }
+  return url;
+};
+
 // Context to share the active filter state, layout direction, action handlers, tooltip state, color map, and media modal
 export const FlowContext = createContext({ 
   activeLens: 'All', 
@@ -675,6 +693,40 @@ const StepNode = ({ id, data }) => {
               className="flex gap-2 overflow-x-auto pb-1.5 nodrag [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory"
             >
               {data.media.map((item, idx) => {
+                const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+                const isDrive = item.url.includes('drive.google.com');
+
+                // Generate a visual thumbnail for Google Drive links
+                if (isDrive) {
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={(e) => handleMediaClick(e, item)}
+                      className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-white cursor-pointer snap-start"
+                    >
+                      <iframe 
+                        src={getDriveEmbedUrl(item.url)} 
+                        className="w-full h-full pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity"
+                        tabIndex="-1"
+                        title="Google Drive Preview"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/5 group-hover:bg-transparent transition-colors">
+                        <div className="bg-blue-600/90 backdrop-blur-sm text-white rounded-full p-2 shadow-sm group-hover:scale-110 transition-transform">
+                          <ExternalLink size={14} />
+                        </div>
+                      </div>
+                      <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 size={12} />
+                      </div>
+                      {item.caption && (
+                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate z-10">
+                          {item.caption}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 if (item.type === 'image') {
                   return (
                     <div 
@@ -698,10 +750,8 @@ const StepNode = ({ id, data }) => {
                     </div>
                   );
                 } 
-                if (item.type === 'video') {
-                  const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
-                  const isDrive = item.url.includes('drive.google.com');
 
+                if (item.type === 'video') {
                   if (isYouTube) {
                     const ytId = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1];
                     const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
@@ -733,18 +783,7 @@ const StepNode = ({ id, data }) => {
                       </div>
                     );
                   } 
-                  if (isDrive) {
-                    // Drive links might not iframe well, so keeping standard blank target behavior for them
-                    return (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer flex flex-col items-center justify-center p-2 text-center snap-start">
-                        <div className="bg-blue-600 text-white rounded-full p-2 shadow-sm group-hover:scale-110 transition-transform mb-1.5">
-                          <ExternalLink size={14} />
-                        </div>
-                        <span className="text-[10px] font-bold text-blue-800">Drive Link</span>
-                        {item.caption && <span className="text-[9px] text-blue-600/80 w-full truncate">{item.caption}</span>}
-                      </a>
-                    );
-                  } 
+                  
                   return (
                     <div 
                       key={idx} 
@@ -1132,6 +1171,7 @@ const MediaModal = ({ mediaItem, onClose }) => {
 
   const isYouTube = mediaItem.type === 'video' && (mediaItem.url.includes('youtube.com') || mediaItem.url.includes('youtu.be'));
   const ytId = isYouTube ? mediaItem.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1] : null;
+  const isDrive = mediaItem.url.includes('drive.google.com');
 
   return (
     <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-200">
@@ -1151,8 +1191,18 @@ const MediaModal = ({ mediaItem, onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-[50vh]">
-          {mediaItem.type === 'image' && (
+        <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-[50vh] p-4 md:p-8">
+          
+          {isDrive && (
+            <iframe 
+              src={getDriveEmbedUrl(mediaItem.url)} 
+              className="w-full h-full min-h-[65vh] rounded-lg bg-white"
+              allow="autoplay"
+              allowFullScreen
+            />
+          )}
+
+          {!isDrive && mediaItem.type === 'image' && (
             <img 
               src={mediaItem.url} 
               alt={mediaItem.caption || 'Expanded media'} 
@@ -1160,25 +1210,39 @@ const MediaModal = ({ mediaItem, onClose }) => {
             />
           )}
 
-          {mediaItem.type === 'video' && isYouTube && ytId && (
+          {!isDrive && mediaItem.type === 'video' && isYouTube && ytId && (
             <iframe 
               src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} 
-              className="w-full h-full min-h-[60vh]"
+              className="w-full h-full min-h-[60vh] rounded-lg bg-black"
               frameBorder="0" 
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
               allowFullScreen
             />
           )}
 
-          {mediaItem.type === 'video' && !isYouTube && (
+          {!isDrive && mediaItem.type === 'video' && !isYouTube && (
             <video 
               src={mediaItem.url} 
               controls 
               autoPlay
-              className="max-w-full max-h-[85vh]"
+              className="max-w-full max-h-[85vh] rounded-lg"
             />
           )}
         </div>
+
+        {/* Action Buttons for Fallback (Specifically useful for Drive files that block iframes) */}
+        {isDrive && (
+          <div className="absolute bottom-6 right-6 z-20">
+             <a 
+               href={mediaItem.url} 
+               target="_blank" 
+               rel="noopener noreferrer"
+               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium transition-colors"
+             >
+               <ExternalLink size={16} /> Open in Google Drive
+             </a>
+          </div>
+        )}
       </div>
     </div>
   );

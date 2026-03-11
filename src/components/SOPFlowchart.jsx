@@ -195,10 +195,14 @@ function generateFlowData(jsonData, currentSop, filters = []) {
   };
 
   // Process reference objects if any
+  // Process reference objects if any
   if (currentSop && currentSop.referenceObjects && Array.isArray(currentSop.referenceObjects)) {
     currentSop.referenceObjects.forEach((refObj) => {
       const refId = refObj.sopId || refObj.id; 
       
+      // ✅ Fetch the referenced SOP's own sections
+      const refSections = refObj.data?.sections; 
+
       nodes.push({
         id: refId,
         type: 'refNode',
@@ -212,7 +216,8 @@ function generateFlowData(jsonData, currentSop, filters = []) {
           status: refObj.status,
           isExpanded: false, 
           visibleLimit: 3,
-          hasChildren: jsonData && jsonData.length > 0, 
+          // ✅ Use refSections instead of jsonData
+          hasChildren: refSections && refSections.length > 0, 
           details: {
             title: `Referenced SOP: ${refObj.title || refObj.name || refId}`,
             description: 'This is a linked procedure. Expand to view its internal steps.',
@@ -231,8 +236,9 @@ function generateFlowData(jsonData, currentSop, filters = []) {
         style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5,5' } 
       });
 
-      if (jsonData) {
-        traverse(jsonData, refId, 1, refId);
+      // ✅ Traverse the referenced SOP's own sections
+      if (refSections) {
+        traverse(refSections, refId, 1, refId);
       }
     });
   }

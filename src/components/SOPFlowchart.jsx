@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, createContext, useContext } from 'react';
+import React, { useCallback, useState, useMemo, createContext, useContext, useRef } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -27,13 +27,16 @@ import {
   Image as ImageIcon,
   Play,
   Video,
-  ExternalLink
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import 'reactflow/dist/style.css';
 
-// Context to share the active filter state, layout direction, action handlers, tooltip state, and color map
+// Context to share the active filter state, layout direction, action handlers, tooltip state, color map, and media modal
 export const FlowContext = createContext({ 
   activeLens: 'All', 
   direction: 'TB',
@@ -41,7 +44,8 @@ export const FlowContext = createContext({
   toggleNode: (id) => {},
   showMore: (id) => {},
   expandAllFromNode: (id) => {},
-  setTooltip: () => {}
+  setTooltip: () => {},
+  openMediaModal: (media) => {}
 });
 
 function cn(...inputs) {
@@ -124,7 +128,6 @@ function determineRoles(item, filters = []) {
   const id = String(item.id);
 
   filters.forEach(filter => {
-    // If ANY of the keywords match the ID exactly, or if the text includes it
     const hasMatch = filter.keywords.some(kw => {
       const kwLower = kw.toLowerCase().trim();
       return id === kwLower || id.startsWith(kwLower) || lowerText.includes(kwLower);
@@ -194,13 +197,9 @@ function generateFlowData(jsonData, currentSop, filters = []) {
     });
   };
 
-  // Process reference objects if any
-  // Process reference objects if any
   if (currentSop && currentSop.referenceObjects && Array.isArray(currentSop.referenceObjects)) {
     currentSop.referenceObjects.forEach((refObj) => {
       const refId = refObj.sopId || refObj.id; 
-      
-      // ✅ Fetch the referenced SOP's own sections
       const refSections = refObj.data?.sections; 
 
       nodes.push({
@@ -216,7 +215,6 @@ function generateFlowData(jsonData, currentSop, filters = []) {
           status: refObj.status,
           isExpanded: false, 
           visibleLimit: 3,
-          // ✅ Use refSections instead of jsonData
           hasChildren: refSections && refSections.length > 0, 
           details: {
             title: `Referenced SOP: ${refObj.title || refObj.name || refId}`,
@@ -236,7 +234,6 @@ function generateFlowData(jsonData, currentSop, filters = []) {
         style: { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5,5' } 
       });
 
-      // ✅ Traverse the referenced SOP's own sections
       if (refSections) {
         traverse(refSections, refId, 1, refId);
       }
@@ -596,14 +593,27 @@ const MainNode = ({ id, data }) => {
 };
 
 const StepNode = ({ id, data }) => {
-  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip, colorMap } = useContext(FlowContext);
+  const { direction, toggleNode, showMore, expandAllFromNode, setTooltip, colorMap, openMediaModal } = useContext(FlowContext);
   const isHorizontal = direction === 'LR';
   const [isHovered, setIsHovered] = useState(false);
+  const scrollContainerRef = useRef(null);
 
-  // Look up dynamic colors for tags
   const primaryRole = data.roles && data.roles.length > 0 ? data.roles[0] : null;
   const primaryColorData = primaryRole && colorMap[primaryRole] ? colorMap[primaryRole] : DEFAULT_COLOR;
   
+  const handleMediaClick = (e, item) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openMediaModal(item);
+  };
+
+  const scrollMedia = (direction) => {
+    if (scrollContainerRef.current) {
+      const scrollAmount = 152; // Width of one media item + gap
+      scrollContainerRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+    }
+  };
+
   return (
     <div 
       onMouseEnter={() => setIsHovered(true)} 
@@ -640,83 +650,131 @@ const StepNode = ({ id, data }) => {
           <p className="text-slate-500 text-xs mb-3 leading-relaxed line-clamp-2">{data.sublabel}</p>
         )}
 
-        {/* --- SCROLLABLE MEDIA GALLERY --- */}
+        {/* --- SCROLLABLE MEDIA GALLERY WITH NAVIGATION ARROWS --- */}
         {data.media && data.media.length > 0 && (
-          <div className="mb-3 flex gap-2 overflow-x-auto pb-1.5 nodrag [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-track]:bg-slate-100">
-            {data.media.map((item, idx) => {
-              if (item.type === 'image') {
-                return (
-                  <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block cursor-pointer">
-                    <img 
-                      src={item.url} 
-                      alt={item.caption || `Image ${idx + 1}`} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-slate-100" 
-                    />
-                    {item.caption && (
-                      <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-1 truncate">
-                        {item.caption}
-                      </div>
-                    )}
-                  </a>
-                );
-              } 
-              if (item.type === 'video') {
-                const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
-                const isDrive = item.url.includes('drive.google.com');
-
-                if (isYouTube) {
-                  const ytId = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1];
-                  const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
-
+          <div className="relative mb-3 group/mediagallery">
+            {data.media.length > 1 && (
+              <>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); scrollMedia('left'); }} 
+                  className="absolute -left-3 top-1/2 -translate-y-1/2 z-20 bg-white shadow-md border border-slate-200 rounded-full p-1 text-slate-600 hover:text-blue-600 hover:bg-slate-50 opacity-0 group-hover/mediagallery:opacity-100 transition-opacity"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); scrollMedia('right'); }} 
+                  className="absolute -right-3 top-1/2 -translate-y-1/2 z-20 bg-white shadow-md border border-slate-200 rounded-full p-1 text-slate-600 hover:text-blue-600 hover:bg-slate-50 opacity-0 group-hover/mediagallery:opacity-100 transition-opacity"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </>
+            )}
+            
+            <div 
+              ref={scrollContainerRef}
+              className="flex gap-2 overflow-x-auto pb-1.5 nodrag [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory"
+            >
+              {data.media.map((item, idx) => {
+                if (item.type === 'image') {
                   return (
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-slate-900 cursor-pointer">
-                      {thumbUrl ? (
-                        <img src={thumbUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" alt="Video Thumbnail" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                          <Video size={24} className="text-slate-400" />
+                    <div 
+                      key={idx} 
+                      onClick={(e) => handleMediaClick(e, item)}
+                      className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block cursor-pointer snap-start"
+                    >
+                      <img 
+                        src={item.url} 
+                        alt={item.caption || `Image ${idx + 1}`} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-slate-100" 
+                      />
+                      <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 size={12} />
+                      </div>
+                      {item.caption && (
+                        <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-1 truncate">
+                          {item.caption}
                         </div>
                       )}
+                    </div>
+                  );
+                } 
+                if (item.type === 'video') {
+                  const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+                  const isDrive = item.url.includes('drive.google.com');
+
+                  if (isYouTube) {
+                    const ytId = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1];
+                    const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+
+                    return (
+                      <div 
+                        key={idx} 
+                        onClick={(e) => handleMediaClick(e, item)}
+                        className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-slate-900 cursor-pointer snap-start"
+                      >
+                        {thumbUrl ? (
+                          <img src={thumbUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" alt="Video Thumbnail" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                            <Video size={24} className="text-slate-400" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                           <div className="bg-red-600 text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                             <Play fill="currentColor" size={14} className="ml-0.5" />
+                           </div>
+                        </div>
+                        <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Maximize2 size={12} />
+                        </div>
+                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate">
+                          {item.caption || 'YouTube Video'}
+                        </div>
+                      </div>
+                    );
+                  } 
+                  if (isDrive) {
+                    // Drive links might not iframe well, so keeping standard blank target behavior for them
+                    return (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer flex flex-col items-center justify-center p-2 text-center snap-start">
+                        <div className="bg-blue-600 text-white rounded-full p-2 shadow-sm group-hover:scale-110 transition-transform mb-1.5">
+                          <ExternalLink size={14} />
+                        </div>
+                        <span className="text-[10px] font-bold text-blue-800">Drive Link</span>
+                        {item.caption && <span className="text-[9px] text-blue-600/80 w-full truncate">{item.caption}</span>}
+                      </a>
+                    );
+                  } 
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={(e) => handleMediaClick(e, item)}
+                      className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-black group cursor-pointer snap-start flex items-center justify-center"
+                    >
+                      <video 
+                        src={item.url} 
+                        preload="metadata"
+                        className="w-full h-full object-cover opacity-70 group-hover:opacity-50 transition-opacity"
+                      />
                       <div className="absolute inset-0 flex items-center justify-center">
-                         <div className="bg-red-600 text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                         <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
                            <Play fill="currentColor" size={14} className="ml-0.5" />
                          </div>
                       </div>
-                      <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate">
-                        {item.caption || 'YouTube Video'}
+                      <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 size={12} />
                       </div>
-                    </a>
+                      {item.caption && (
+                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate z-10 pointer-events-none">
+                          {item.caption}
+                        </div>
+                      )}
+                    </div>
                   );
-                } 
-                if (isDrive) {
-                  return (
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer flex flex-col items-center justify-center p-2 text-center">
-                      <div className="bg-blue-600 text-white rounded-full p-2 shadow-sm group-hover:scale-110 transition-transform mb-1.5">
-                        <ExternalLink size={14} />
-                      </div>
-                      <span className="text-[10px] font-bold text-blue-800">Drive Link</span>
-                      {item.caption && <span className="text-[9px] text-blue-600/80 w-full truncate">{item.caption}</span>}
-                    </a>
-                  );
-                } 
-                return (
-                  <div key={idx} className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-black group">
-                    <video 
-                      src={item.url} 
-                      controls 
-                      preload="metadata"
-                      className="w-full h-full object-cover"
-                    />
-                    {item.caption && (
-                      <div className="absolute top-0 w-full bg-gradient-to-b from-black/80 to-transparent text-white text-[9px] px-1.5 py-1 pb-3 truncate z-10 pointer-events-none">
-                        {item.caption}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              return null;
-            })}
+                }
+                return null;
+              })}
+            </div>
           </div>
         )}
         {/* ---------------------------------- */}
@@ -774,10 +832,9 @@ const nodeTypes = {
 // 6. MAIN COMPONENT (WRAPPER)
 // ============================================================================
 
-function FlowchartInstance({ sop }) {
+function FlowchartInstance({ sop, openMediaModal }) {
   const filtersList = sop?.data?.filters || [];
 
-  // Generate dynamic color map from the filters
   const colorMap = useMemo(() => {
     const map = {};
     filtersList.forEach(f => {
@@ -786,7 +843,6 @@ function FlowchartInstance({ sop }) {
     return map;
   }, [filtersList]);
 
-  // Generate node lenses derived strictly from actual filter data
   const lensOptions = useMemo(() => {
     return ['All', ...filtersList.map(f => f.label)];
   }, [filtersList]);
@@ -982,8 +1038,7 @@ function FlowchartInstance({ sop }) {
 
   return (
     <div className="w-full h-full bg-slate-50 relative flex font-sans overflow-hidden">
-      
-      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, colorMap, toggleNode, showMore, expandAllFromNode, setTooltip }}>
+      <FlowContext.Provider value={{ activeLens, direction: layoutDirection, colorMap, toggleNode, showMore, expandAllFromNode, setTooltip, openMediaModal }}>
         <div className="flex-1 h-full p-6 relative">
           <ReactFlow
             nodes={nodes}
@@ -1071,39 +1126,102 @@ function FlowchartInstance({ sop }) {
   );
 }
 
-export default function SOPFlowchart({ sop, onClose }) {
-  const headerTitle = sop?.title || 'SOP Flow Map';
+// Media Modal Component
+const MediaModal = ({ mediaItem, onClose }) => {
+  if (!mediaItem) return null;
+
+  const isYouTube = mediaItem.type === 'video' && (mediaItem.url.includes('youtube.com') || mediaItem.url.includes('youtu.be'));
+  const ytId = isYouTube ? mediaItem.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1] : null;
 
   return (
-    <div className="relative w-full max-w-[95vw] h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden pointer-events-auto">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white z-20 shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-blue-200 shadow-lg shrink-0">
-            <Share2 size={20} />
+    <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-200">
+      <div className="relative w-full max-w-5xl max-h-full flex flex-col bg-black rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+        
+        {/* Header */}
+        <div className="absolute top-0 w-full flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent z-10">
+          <div className="text-white text-sm font-medium px-2 drop-shadow-md">
+            {mediaItem.caption || 'Media Viewer'}
           </div>
-          <div>
-            <h1 className="text-slate-800 font-bold text-base whitespace-nowrap">
-              Process Flow: {headerTitle}
-            </h1>
-            <p className="text-slate-500 text-xs font-medium whitespace-nowrap">
-              Top-Down / Left-Right View
-            </p>
-          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 bg-black/50 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        <button 
-          onClick={onClose}
-          className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-      
-      <div className="flex-1 w-full bg-slate-50 relative overflow-hidden">
-        <ReactFlowProvider>
-          <FlowchartInstance sop={sop} />
-        </ReactFlowProvider>
+        {/* Content */}
+        <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-[50vh]">
+          {mediaItem.type === 'image' && (
+            <img 
+              src={mediaItem.url} 
+              alt={mediaItem.caption || 'Expanded media'} 
+              className="max-w-full max-h-[85vh] object-contain"
+            />
+          )}
+
+          {mediaItem.type === 'video' && isYouTube && ytId && (
+            <iframe 
+              src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} 
+              className="w-full h-full min-h-[60vh]"
+              frameBorder="0" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+              allowFullScreen
+            />
+          )}
+
+          {mediaItem.type === 'video' && !isYouTube && (
+            <video 
+              src={mediaItem.url} 
+              controls 
+              autoPlay
+              className="max-w-full max-h-[85vh]"
+            />
+          )}
+        </div>
       </div>
     </div>
+  );
+};
+
+export default function SOPFlowchart({ sop, onClose }) {
+  const headerTitle = sop?.title || 'SOP Flow Map';
+  const [activeMedia, setActiveMedia] = useState(null);
+
+  return (
+    <>
+      <div className="relative w-full max-w-[95vw] h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden pointer-events-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white z-20 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-blue-200 shadow-lg shrink-0">
+              <Share2 size={20} />
+            </div>
+            <div>
+              <h1 className="text-slate-800 font-bold text-base whitespace-nowrap">
+                Process Flow: {headerTitle}
+              </h1>
+              <p className="text-slate-500 text-xs font-medium whitespace-nowrap">
+                Top-Down / Left-Right View
+              </p>
+            </div>
+          </div>
+
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        <div className="flex-1 w-full bg-slate-50 relative overflow-hidden">
+          <ReactFlowProvider>
+            <FlowchartInstance sop={sop} openMediaModal={setActiveMedia} />
+          </ReactFlowProvider>
+        </div>
+      </div>
+
+      <MediaModal mediaItem={activeMedia} onClose={() => setActiveMedia(null)} />
+    </>
   );
 }

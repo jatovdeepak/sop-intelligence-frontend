@@ -270,15 +270,14 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
 };
 
 // --- Main Layout Component (Exported) ---
+// --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
-  // CHANGED: Load the PDF file directly from the stored URL in the SOP data!
   const [pdfFile, setPdfFile] = useState(sop?.pdfPathBase64 || null);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const fileInputRef = useRef(null); 
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-  // CHANGED: Update the PDF file if the SOP prop changes
   useEffect(() => {
     if (sop?.pdfPathBase64) {
       console.log(sop?.pdfPathBase64);
@@ -286,19 +285,12 @@ export default function DataExtractor({ sop, onClose }) {
     }
   }, [sop]);
   
+  // CHANGED: Initialize purely from sop.data or use the default structure
   const [documentData, setDocumentData] = useState(() => {
-    if (sop && sop.data && Object.keys(sop.data).length > 0 && sop.data.sections) {
+    if (sop?.data?.sections) {
       return sop.data;
     }
 
-    const saved = localStorage.getItem(`sopData_${sop?._id || 'new'}`);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse local storage data", e);
-      }
-    }
     return {
       metadata: [],
       filters: [],
@@ -314,31 +306,28 @@ export default function DataExtractor({ sop, onClose }) {
     }
   }, []);
 
-  // Auto-Save Effect (Debounced 1.5 seconds to DB)
+  // CHANGED: Auto-Save Effect (Debounced 1.5 seconds directly to the backend)
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      localStorage.setItem(`sopData_${sop?._id || 'new'}`, JSON.stringify(documentData));
-      
-      if (sop && sop._id) {
-        try {
-          const token = localStorage.getItem("token");
-          const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ data: documentData }) 
-          });
+    // Prevent auto-save if this is a purely new/unsaved SOP without an ID
+    if (!sop?._id) return;
 
-          if (response.ok) {
-            setLastSaved(new Date());
-          }
-        } catch (err) {
-          console.error("Auto-save failed:", err);
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ data: documentData }) 
+        });
+
+        if (response.ok) {
+          setLastSaved(new Date());
         }
-      } else {
-         setLastSaved(new Date());
+      } catch (err) {
+        console.error("Auto-save failed:", err);
       }
     }, 1500);
     
@@ -474,7 +463,7 @@ export default function DataExtractor({ sop, onClose }) {
       {/* Left side: PDF Viewer */}
       <div className="w-1/2 p-4 flex flex-col border-r border-gray-300 bg-gray-50">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          {sop ? `SOP Viewer: ${sop.sopId}` : "SOP Viewer"}
+          {sop ? `SOP Viewer: ${sop.sopId || 'Document'}` : "SOP Viewer"}
         </h2>
         {!pdfFile ? (
           <div className="flex-1 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-white shadow-sm">

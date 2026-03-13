@@ -459,7 +459,7 @@ export default function DataExtractor({ sop, onClose }) {
   };
 
   return (
-    <div className="flex h-full w-full bg-gray-100 overflow-hidden text-gray-800 font-sans relative">
+    <div className="flex h-full w-full bg-gray-100 overflow-hidden text-gray-800 font-sans relative" style={{ zoom: '80%' }}>
       {/* Left side: PDF Viewer */}
       <div className="w-1/2 p-4 flex flex-col border-r border-gray-300 bg-gray-50">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">

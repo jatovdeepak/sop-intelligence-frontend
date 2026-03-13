@@ -272,16 +272,15 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
 // --- Main Layout Component (Exported) ---
 // --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
-  const [pdfFile, setPdfFile] = useState(sop?.pdfPathBase64 || null);
+  const [pdfFile, setPdfFile] = useState(sop?.pdfPath || null);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const fileInputRef = useRef(null); 
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   useEffect(() => {
-    if (sop?.pdfPathBase64) {
-      console.log(sop?.pdfPathBase64);
-      setPdfFile(sop.pdfPathBase64);
+    if (sop?.pdfPath) {
+      setPdfFile(sop.pdfPath);
     }
   }, [sop]);
   

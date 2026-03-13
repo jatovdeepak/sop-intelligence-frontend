@@ -88,6 +88,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
 
     try {
       let fileUrl = "";
+      let pdfbase64 = "";
 
       // STEP 1: Upload the file to the Storage Microservice
       const fileData = new FormData();
@@ -106,6 +107,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
 
       // Extract the shiny new URL provided by the storage service
       fileUrl = uploadJson.url;
+      pdfbase64 = uploadJson.pdfBase64;
 
       // STEP 2: Send the metadata AND the file URL to the main backend as JSON
       const sopData = {
@@ -118,6 +120,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
         status: "Active",
         requiredRoles: ["Operator"], // Using an array for roles
         pdfPath: fileUrl, // Save the absolute URL directly into the DB
+        pdfPathBase64: pdfbase64
       };
 
       const token = localStorage.getItem("token");

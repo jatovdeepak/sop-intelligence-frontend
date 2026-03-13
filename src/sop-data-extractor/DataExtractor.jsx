@@ -272,7 +272,7 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
 // --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
   // CHANGED: Load the PDF file directly from the stored URL in the SOP data!
-  const [pdfFile, setPdfFile] = useState(sop?.pdfPath || null);
+  const [pdfFile, setPdfFile] = useState(sop?.pdfPathBase64 || null);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const fileInputRef = useRef(null); 
@@ -280,8 +280,9 @@ export default function DataExtractor({ sop, onClose }) {
 
   // CHANGED: Update the PDF file if the SOP prop changes
   useEffect(() => {
-    if (sop?.pdfPath) {
-      setPdfFile(sop.pdfPath);
+    if (sop?.pdfPathBase64) {
+      console.log(sop?.pdfPathBase64);
+      setPdfFile(sop.pdfPathBase64);
     }
   }, [sop]);
   

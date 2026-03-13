@@ -6,7 +6,9 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
   const [toast, setToast] = useState(null); 
   const [availableSops, setAvailableSops] = useState([]);
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "";
+  // Environment variables
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+  const STORAGE_URL = import.meta.env.VITE_API_STORAGE_SERVER || "http://localhost:5001";
   
   // Form state tracking
   const [formData, setFormData] = useState({
@@ -15,7 +17,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
     type: "",
     version: "v1.0",
     description: "",
-    references: [], // NEW: Array to hold selected SOP IDs
+    references: [], 
   });
   const [pdfFile, setPdfFile] = useState(null);
 
@@ -85,28 +87,48 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
     setLoading(true);
 
     try {
-      const data = new FormData();
-      data.append("sopId", formData.sopId);
-      data.append("title", formData.title);
-      data.append("type", formData.type);
-      data.append("version", formData.version);
-      data.append("description", formData.description);
-      
-      // Stringify the array so it passes through FormData properly
-      data.append("references", JSON.stringify(formData.references));
+      let fileUrl = "";
 
-      data.append("status", "Active"); 
-      data.append("requiredRoles", "Operator"); 
-      data.append("pdf", pdfFile);
+      // STEP 1: Upload the file to the Storage Microservice
+      const fileData = new FormData();
+      fileData.append("file", pdfFile); // Note: field name "file" must match your multer config upload.single('file')
+
+      const uploadRes = await fetch(`${STORAGE_URL}/api/upload`, {
+        method: "POST",
+        body: fileData,
+      });
+
+      const uploadJson = await uploadRes.json();
+
+      if (!uploadRes.ok) {
+        throw new Error(uploadJson.error || "Failed to upload file to storage server");
+      }
+
+      // Extract the shiny new URL provided by the storage service
+      fileUrl = uploadJson.url;
+
+      // STEP 2: Send the metadata AND the file URL to the main backend as JSON
+      const sopData = {
+        sopId: formData.sopId,
+        title: formData.title,
+        type: formData.type,
+        version: formData.version,
+        description: formData.description,
+        references: formData.references, // JSON stringification is handled natively by body: JSON.stringify()
+        status: "Active",
+        requiredRoles: ["Operator"], // Using an array for roles
+        pdfPath: fileUrl, // Save the absolute URL directly into the DB
+      };
 
       const token = localStorage.getItem("token");
 
       const response = await fetch(`${API_URL}/api/sops`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json", // Switching to JSON since we aren't sending files here anymore
           Authorization: `Bearer ${token}`, 
         },
-        body: data,
+        body: JSON.stringify(sopData),
       });
 
       const result = await response.json();
@@ -229,7 +251,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
               </div>
             </div>
 
-            {/* NEW: Referenced SOPs Multi-Select Dropdown */}
+            {/* Referenced SOPs Multi-Select Dropdown */}
             <div>
               <label className="mb-2 block text-sm font-medium">Referenced SOPs</label>
               

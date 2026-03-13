@@ -7,29 +7,31 @@ import {
   ShieldCheck,
   GitBranch,
   Trash2,
+  FileJson, // <-- NEW IMPORT
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
 import ChatWithSOP from "../components/ChatWithSOP";
 import AddSOPModal from "../components/AddSOPModal";
-import EditSOPModal from "../components/EditSOPModal"; // <-- NEW IMPORT
+import EditSOPModal from "../components/EditSOPModal";
 import SOPFlowchart from "../components/SOPFlowchart";
+import DataExtractor from "../sop-data-extractor/DataExtractor"; // <-- NEW IMPORT
 
 export default function Library() {
   const [showCompliance, setShowCompliance] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showAddSOP, setShowAddSOP] = useState(false);
-  const [showEditSOP, setShowEditSOP] = useState(false); // <-- NEW STATE
+  const [showEditSOP, setShowEditSOP] = useState(false);
   const [showFlowchart, setShowFlowchart] = useState(false);
+  const [showExtractor, setShowExtractor] = useState(false); // <-- NEW STATE
   const [selectedSop, setSelectedSop] = useState(null);
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   
-  // Dynamic state for SOPs fetched from the backend
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
   const [sops, setSops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch SOPs from Backend
   const fetchSOPs = async () => {
     setLoading(true);
     try {
@@ -54,15 +56,12 @@ export default function Library() {
     }
   };
 
-  // Run on component mount
   useEffect(() => {
     fetchSOPs();
   }, []);
 
-  // NEW: Delete SOP Handler
   const handleDeleteSOP = async (id) => {
     if (!window.confirm("Are you sure you want to delete this SOP? This action cannot be undone.")) return;
-    
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/api/sops/${id}`, {
@@ -72,19 +71,15 @@ export default function Library() {
         },
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to delete SOP");
-      }
-
-      // Refresh the list after successful deletion
+      if (!response.ok) throw new Error("Failed to delete SOP");
       fetchSOPs();
     } catch (err) {
       alert("Error deleting SOP: " + err.message);
     }
   };
 
-  // ADDED onEdit and onDelete props
-  function ActionsMenu({ onCompliance, onChat, onFlowchart, onEdit, onDelete }) {
+  // ADDED onExtract prop
+  function ActionsMenu({ onCompliance, onChat, onFlowchart, onEdit, onDelete, onExtract }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
@@ -106,24 +101,21 @@ export default function Library() {
         />
 
         {open && (
-          <div
-            className="
-            absolute right-0 bottom-6
-            w-52
-            rounded-xl
-            bg-white
-            border border-slate-200
-            shadow-[0_8px_24px_rgba(0,0,0,0.12)]
-            z-50
-            py-1
-          "
-          >
-            {/* UPDATED EDIT BUTTON */}
+          <div className="absolute right-0 bottom-6 w-52 rounded-xl bg-white border border-slate-200 shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-50 py-1">
             <MenuItem 
               icon={Pencil} 
               label="Edit" 
               onClick={() => {
                 onEdit();
+                setOpen(false);
+              }} 
+            />
+            {/* NEW MENU ITEM */}
+            <MenuItem 
+              icon={FileJson} 
+              label="Data Extractor" 
+              onClick={() => {
+                onExtract();
                 setOpen(false);
               }} 
             />
@@ -155,7 +147,6 @@ export default function Library() {
 
             <div className="my-1 h-px bg-slate-200" />
 
-            {/* UPDATED DELETE BUTTON */}
             <MenuItem 
               icon={Trash2} 
               label="Delete" 
@@ -175,19 +166,9 @@ export default function Library() {
     return (
       <button
         onClick={onClick}
-        className={`
-          w-full
-          flex items-center gap-3
-          px-3 py-2
-          text-[13px]
-          text-left
-          transition
-          ${
-            danger
-              ? "text-red-600 hover:bg-red-50"
-              : "text-slate-700 hover:bg-slate-100"
-          }
-        `}
+        className={`w-full flex items-center gap-3 px-3 py-2 text-[13px] text-left transition ${
+            danger ? "text-red-600 hover:bg-red-50" : "text-slate-700 hover:bg-slate-100"
+          }`}
       >
         <Icon className="h-4 w-4 text-slate-600" />
         {label}
@@ -214,27 +195,14 @@ export default function Library() {
         </button>
       </div>
 
-      {/* Filters */}
+      {/* Filters (Visual Only) */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-100">
         <div className="mb-4 font-medium text-slate-800">Filters</div>
-
         <div className="grid grid-cols-4 gap-4">
-          <input
-            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-            placeholder="Type/Department"
-          />
-          <input
-            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-            placeholder="Status"
-          />
-          <input
-            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-            placeholder="SOP ID"
-          />
-          <input
-            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-            placeholder="mm/dd/yyyy"
-          />
+          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="Type/Department" />
+          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="Status" />
+          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="SOP ID" />
+          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="mm/dd/yyyy" />
         </div>
       </div>
 
@@ -278,13 +246,8 @@ export default function Library() {
               </tr>
             ) : (
               sops.map((row) => (
-                <tr
-                  key={row._id || row.sopId}
-                  className="hover:bg-slate-50/80 transition duration-150"
-                >
-                  <td className="py-4 px-6 font-medium text-slate-700">
-                    {row.sopId}
-                  </td>
+                <tr key={row._id || row.sopId} className="hover:bg-slate-50/80 transition duration-150">
+                  <td className="py-4 px-6 font-medium text-slate-700">{row.sopId}</td>
                   <td className="py-4 px-6 text-slate-700">{row.title}</td>
                   <td className="py-4 px-6 text-slate-500">{row.version || 'v1.0'}</td>
                   <td className="py-4 px-6 text-slate-500">{row.type}</td>
@@ -319,6 +282,10 @@ export default function Library() {
                           setShowEditSOP(true);
                         }}
                         onDelete={() => handleDeleteSOP(row._id)}
+                        onExtract={() => { // <-- NEW HOOK IN MAP
+                          setSelectedSop(row);
+                          setShowExtractor(true);
+                        }}
                         onCompliance={() => {
                           setSelectedSop(row);
                           setShowCompliance(true);
@@ -352,6 +319,22 @@ export default function Library() {
       </div>
 
       {/* Modals */}
+      
+      {/* NEW: Data Extractor Modal */}
+      {showExtractor && selectedSop && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="relative w-full h-full max-h-screen rounded-2xl bg-white shadow-2xl overflow-hidden">
+             <DataExtractor 
+               sop={selectedSop} 
+               onClose={() => {
+                 setShowExtractor(false);
+                 fetchSOPs(); // Fetch to update last modified dates
+               }} 
+             />
+          </div>
+        </div>
+      )}
+
       {showCompliance && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="relative w-full max-w-6xl h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
@@ -385,7 +368,6 @@ export default function Library() {
         />
       )}
 
-      {/* NEW: Edit SOP Modal */}
       {showEditSOP && selectedSop && (
         <EditSOPModal 
           sop={selectedSop}

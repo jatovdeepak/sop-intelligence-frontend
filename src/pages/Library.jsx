@@ -16,6 +16,7 @@ import AddSOPModal from "../components/AddSOPModal";
 import EditSOPModal from "../components/EditSOPModal";
 import SOPFlowchart from "../components/SOPFlowchart";
 import DataExtractor from "../sop-data-extractor/DataExtractor"; // <-- NEW IMPORT
+import PDFViewerModal from "../components/PDFViewerModal"; // Adjust path if needed
 
 export default function Library() {
   const [showCompliance, setShowCompliance] = useState(false);
@@ -25,7 +26,8 @@ export default function Library() {
   const [showFlowchart, setShowFlowchart] = useState(false);
   const [showExtractor, setShowExtractor] = useState(false); // <-- NEW STATE
   const [selectedSop, setSelectedSop] = useState(null);
-  
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
+
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   const [sops, setSops] = useState([]);
@@ -61,7 +63,12 @@ export default function Library() {
   }, []);
 
   const handleDeleteSOP = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this SOP? This action cannot be undone.")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this SOP? This action cannot be undone."
+      )
+    )
+      return;
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/api/sops/${id}`, {
@@ -79,7 +86,14 @@ export default function Library() {
   };
 
   // ADDED onExtract prop
-  function ActionsMenu({ onCompliance, onChat, onFlowchart, onEdit, onDelete, onExtract }) {
+  function ActionsMenu({
+    onCompliance,
+    onChat,
+    onFlowchart,
+    onEdit,
+    onDelete,
+    onExtract,
+  }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
@@ -102,22 +116,22 @@ export default function Library() {
 
         {open && (
           <div className="absolute right-0 bottom-6 w-52 rounded-xl bg-white border border-slate-200 shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-50 py-1">
-            <MenuItem 
-              icon={Pencil} 
-              label="Edit" 
+            <MenuItem
+              icon={Pencil}
+              label="Edit"
               onClick={() => {
                 onEdit();
                 setOpen(false);
-              }} 
+              }}
             />
             {/* NEW MENU ITEM */}
-            <MenuItem 
-              icon={FileJson} 
-              label="Data Extractor" 
+            <MenuItem
+              icon={FileJson}
+              label="Data Extractor"
               onClick={() => {
                 onExtract();
                 setOpen(false);
-              }} 
+              }}
             />
             <MenuItem icon={History} label="View Version" />
             <MenuItem
@@ -147,14 +161,14 @@ export default function Library() {
 
             <div className="my-1 h-px bg-slate-200" />
 
-            <MenuItem 
-              icon={Trash2} 
-              label="Delete" 
-              danger 
+            <MenuItem
+              icon={Trash2}
+              label="Delete"
+              danger
               onClick={() => {
                 onDelete();
                 setOpen(false);
-              }} 
+              }}
             />
           </div>
         )}
@@ -167,8 +181,10 @@ export default function Library() {
       <button
         onClick={onClick}
         className={`w-full flex items-center gap-3 px-3 py-2 text-[13px] text-left transition ${
-            danger ? "text-red-600 hover:bg-red-50" : "text-slate-700 hover:bg-slate-100"
-          }`}
+          danger
+            ? "text-red-600 hover:bg-red-50"
+            : "text-slate-700 hover:bg-slate-100"
+        }`}
       >
         <Icon className="h-4 w-4 text-slate-600" />
         {label}
@@ -199,10 +215,22 @@ export default function Library() {
       <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-100">
         <div className="mb-4 font-medium text-slate-800">Filters</div>
         <div className="grid grid-cols-4 gap-4">
-          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="Type/Department" />
-          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="Status" />
-          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="SOP ID" />
-          <input className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="mm/dd/yyyy" />
+          <input
+            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            placeholder="Type/Department"
+          />
+          <input
+            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            placeholder="Status"
+          />
+          <input
+            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            placeholder="SOP ID"
+          />
+          <input
+            className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            placeholder="mm/dd/yyyy"
+          />
         </div>
       </div>
 
@@ -246,13 +274,22 @@ export default function Library() {
               </tr>
             ) : (
               sops.map((row) => (
-                <tr key={row._id || row.sopId} className="hover:bg-slate-50/80 transition duration-150">
-                  <td className="py-4 px-6 font-medium text-slate-700">{row.sopId}</td>
+                <tr
+                  key={row._id || row.sopId}
+                  className="hover:bg-slate-50/80 transition duration-150"
+                >
+                  <td className="py-4 px-6 font-medium text-slate-700">
+                    {row.sopId}
+                  </td>
                   <td className="py-4 px-6 text-slate-700">{row.title}</td>
-                  <td className="py-4 px-6 text-slate-500">{row.version || 'v1.0'}</td>
+                  <td className="py-4 px-6 text-slate-500">
+                    {row.version || "v1.0"}
+                  </td>
                   <td className="py-4 px-6 text-slate-500">{row.type}</td>
                   <td className="py-4 px-6 text-slate-500">
-                    {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : 'N/A'}
+                    {row.updatedAt
+                      ? new Date(row.updatedAt).toLocaleDateString()
+                      : "N/A"}
                   </td>
                   <td className="py-4 px-6">
                     <span
@@ -264,13 +301,17 @@ export default function Library() {
                           : "bg-amber-100 text-amber-700 border border-amber-200"
                       }`}
                     >
-                      {row.status || 'Draft'}
+                      {row.status || "Draft"}
                     </span>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-4">
-                      <button 
-                        onClick={() => window.open(`${API_URL}/api/sops/${row._id}/pdf`, "_blank")}
+                      {/* Change this block */}
+                      <button
+                        onClick={() => {
+                          setSelectedSop(row);
+                          setShowPdfViewer(true);
+                        }}
                         className="p-1 hover:bg-blue-50 rounded transition"
                         title="View PDF"
                       >
@@ -282,7 +323,8 @@ export default function Library() {
                           setShowEditSOP(true);
                         }}
                         onDelete={() => handleDeleteSOP(row._id)}
-                        onExtract={() => { // <-- NEW HOOK IN MAP
+                        onExtract={() => {
+                          // <-- NEW HOOK IN MAP
                           setSelectedSop(row);
                           setShowExtractor(true);
                         }}
@@ -295,10 +337,21 @@ export default function Library() {
                           setShowChat(true);
                         }}
                         onFlowchart={() => {
-                          const referenceObjects = (row.references || []).map((refId) => {
-                            const foundSop = sops.find((r) => r.sopId === refId);
-                            return foundSop || { sopId: refId, title: "Unknown SOP", type: "Unknown", status: "N/A" };
-                          });
+                          const referenceObjects = (row.references || []).map(
+                            (refId) => {
+                              const foundSop = sops.find(
+                                (r) => r.sopId === refId
+                              );
+                              return (
+                                foundSop || {
+                                  sopId: refId,
+                                  title: "Unknown SOP",
+                                  type: "Unknown",
+                                  status: "N/A",
+                                }
+                              );
+                            }
+                          );
 
                           const enrichedSop = {
                             ...row,
@@ -319,18 +372,18 @@ export default function Library() {
       </div>
 
       {/* Modals */}
-      
+
       {/* NEW: Data Extractor Modal */}
       {showExtractor && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="relative w-full h-full max-h-screen rounded-2xl bg-white shadow-2xl overflow-hidden">
-             <DataExtractor 
-               sop={selectedSop} 
-               onClose={() => {
-                 setShowExtractor(false);
-                 fetchSOPs(); // Fetch to update last modified dates
-               }} 
-             />
+            <DataExtractor
+              sop={selectedSop}
+              onClose={() => {
+                setShowExtractor(false);
+                fetchSOPs(); // Fetch to update last modified dates
+              }}
+            />
           </div>
         </div>
       )}
@@ -362,17 +415,25 @@ export default function Library() {
       )}
 
       {showAddSOP && (
-        <AddSOPModal 
-          onClose={() => setShowAddSOP(false)} 
-          onSOPAdded={fetchSOPs} 
+        <AddSOPModal
+          onClose={() => setShowAddSOP(false)}
+          onSOPAdded={fetchSOPs}
         />
       )}
 
       {showEditSOP && selectedSop && (
-        <EditSOPModal 
+        <EditSOPModal
           sop={selectedSop}
-          onClose={() => setShowEditSOP(false)} 
-          onSOPEdited={fetchSOPs} 
+          onClose={() => setShowEditSOP(false)}
+          onSOPEdited={fetchSOPs}
+        />
+      )}
+
+      {/* NEW: PDF Viewer Modal */}
+      {showPdfViewer && selectedSop && (
+        <PDFViewerModal
+          sop={selectedSop}
+          onClose={() => setShowPdfViewer(false)}
         />
       )}
     </div>

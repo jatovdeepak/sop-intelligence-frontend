@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TableEditor from './TableEditor';
 import FlowchartEditor from './FlowchartEditor';
+import MediaEditor from './MediaEditor';
 
 // --- Icons ---
 const TrashIcon = () => (
@@ -27,13 +28,29 @@ const ImportIcon = () => (
   </svg>
 );
 
-const MediaIcon = () => (
-  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-  </svg>
-);
-
 const COLOR_OPTIONS = ['blue', 'purple', 'amber', 'emerald', 'rose', 'cyan', 'indigo', 'orange', 'gray'];
+
+// Add this above your DataExtractor component
+const base64toBlob = (base64Data, contentType = 'application/pdf') => {
+  // Strip out the data:application/pdf;base64, prefix if it exists
+  const base64WithoutPrefix = base64Data.replace(/^data:[^;]+;base64,/, '');
+  
+  const byteCharacters = atob(base64WithoutPrefix);
+  const byteArrays = [];
+  const sliceSize = 512; // Process in chunks to avoid memory spikes
+
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+
+  return new Blob(byteArrays, { type: contentType });
+};
 
 // --- Helpers to update deeply nested nodes immutably ---
 const updateTree = (nodes, targetId, updater) => {
@@ -121,21 +138,6 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
     }));
   };
 
-  const handleMediaChange = (index, field, value) => {
-    onUpdate(node.id, (n) => {
-      const newMedia = [...(n.media || [])];
-      newMedia[index] = { ...newMedia[index], [field]: value };
-      return { ...n, media: newMedia };
-    });
-  };
-
-  const handleDeleteMedia = (index) => {
-    onUpdate(node.id, (n) => ({
-      ...n,
-      media: (n.media || []).filter((_, i) => i !== index)
-    }));
-  };
-
   return (
     <div className="border border-gray-300 rounded p-4 mb-4 ml-4 bg-white shadow-sm relative group">
       <div className="flex gap-2 mb-3 items-center">
@@ -192,40 +194,8 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
         </div>
       )}
 
-      {(node.media || []).length > 0 && (
-        <div className="mb-3 space-y-2 bg-blue-50 p-3 rounded border border-blue-200">
-          <label className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-2 flex items-center gap-1">
-            <MediaIcon /> Section Media
-          </label>
-          {(node.media || []).map((m, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <select 
-                className="border border-gray-300 p-1.5 rounded text-sm focus:outline-blue-500 bg-white"
-                value={m.type}
-                onChange={(e) => handleMediaChange(i, 'type', e.target.value)}
-              >
-                <option value="image">Image</option>
-                <option value="video">Video</option>
-              </select>
-              <input 
-                className="border border-gray-300 p-1.5 flex-1 rounded text-sm focus:outline-blue-500" 
-                placeholder="Media URL" 
-                value={m.url} 
-                onChange={(e) => handleMediaChange(i, 'url', e.target.value)} 
-              />
-              <input 
-                className="border border-gray-300 p-1.5 flex-1 rounded text-sm focus:outline-blue-500" 
-                placeholder="Caption (Optional)" 
-                value={m.caption} 
-                onChange={(e) => handleMediaChange(i, 'caption', e.target.value)} 
-              />
-              <button onClick={() => handleDeleteMedia(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
-                <TrashIcon />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Replaced Inline Media Block with the newly imported Component */}
+      <MediaEditor nodeId={node.id} media={node.media || []} onUpdate={onUpdate} />
 
       <textarea
         className="border border-gray-300 p-2 w-full rounded mb-3 h-24 focus:outline-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -270,21 +240,38 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
 };
 
 // --- Main Layout Component (Exported) ---
-// --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
-  const [pdfFile, setPdfFile] = useState(sop?.pdfPath || null);
+  const [pdfFile, setPdfFile] = useState(sop?.pdfPathBase64 || null);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const fileInputRef = useRef(null); 
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   useEffect(() => {
-    if (sop?.pdfPath) {
-      setPdfFile(sop.pdfPath);
+    let objectUrl = null;
+
+    if (sop?.pdfPathBase64) {
+      try {
+        // Convert the base64 string to a Blob
+        const blob = base64toBlob(sop.pdfPathBase64);
+        // Create an optimized local URL for the iframe
+        objectUrl = URL.createObjectURL(blob);
+        setPdfFile(objectUrl);
+      } catch (error) {
+        console.error("Failed to parse PDF Base64 data:", error);
+      }
     }
+
+    // Cleanup function: Revoke the URL when the component unmounts 
+    // or when the SOP changes to prevent memory leaks.
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
   }, [sop]);
   
-  // CHANGED: Initialize purely from sop.data or use the default structure
+  // Initialize purely from sop.data or use the default structure
   const [documentData, setDocumentData] = useState(() => {
     if (sop?.data?.sections) {
       return sop.data;
@@ -305,7 +292,7 @@ export default function DataExtractor({ sop, onClose }) {
     }
   }, []);
 
-  // CHANGED: Auto-Save Effect (Debounced 1.5 seconds directly to the backend)
+  // Auto-Save Effect (Debounced 1.5 seconds directly to the backend)
   useEffect(() => {
     // Prevent auto-save if this is a purely new/unsaved SOP without an ID
     if (!sop?._id) return;

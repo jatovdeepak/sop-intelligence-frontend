@@ -11,19 +11,19 @@ const TrashIcon = () => (
 );
 
 const CopyIcon = () => (
-  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
   </svg>
 );
 
 const DownloadIcon = () => (
-  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
   </svg>
 );
 
 const ImportIcon = () => (
-  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
   </svg>
 );
@@ -139,30 +139,30 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
   };
 
   return (
-    <div className="border border-gray-300 rounded p-4 mb-4 ml-4 bg-white shadow-sm relative group">
-      <div className="flex gap-2 mb-3 items-center">
+    <div className="border border-gray-300 rounded p-2 mb-2 ml-3 bg-white shadow-sm relative group text-xs">
+      <div className="flex gap-1 mb-1.5 items-center">
         <input
-          className="border border-gray-300 p-2 w-24 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold"
+          className="border border-gray-300 p-1 w-16 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
           placeholder="ID (1.0)"
           value={node.id}
           onChange={(e) => handleChange('id', e.target.value)}
         />
         <input
-          className="border border-gray-300 p-2 w-32 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 text-sm"
-          placeholder="Pg (e.g., 3-5)"
+          className="border border-gray-300 p-1 w-20 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 text-xs"
+          placeholder="Pg (3-5)"
           value={node.pageNumbers || ''}
           onChange={(e) => handleChange('pageNumbers', e.target.value)}
           title="Page Numbers"
         />
         <input
-          className="border border-gray-300 p-2 flex-1 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold"
+          className="border border-gray-300 p-1 flex-1 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
           placeholder="Section Title"
           value={node.title}
           onChange={(e) => handleChange('title', e.target.value)}
         />
         <button
           onClick={() => onDelete(node.id)}
-          className="text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors p-2 rounded"
+          className="text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors p-1 rounded"
           title="Delete Entire Section"
         >
           <TrashIcon />
@@ -170,18 +170,18 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
       </div>
 
       {(node.metadata || []).length > 0 && (
-        <div className="mb-3 space-y-2 bg-gray-50 p-3 rounded border border-gray-200">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Section Metadata</label>
+        <div className="mb-1.5 space-y-1 bg-gray-50 p-1.5 rounded border border-gray-200">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Section Metadata</label>
           {(node.metadata || []).map((meta, i) => (
-            <div key={i} className="flex gap-2 items-center">
+            <div key={i} className="flex gap-1 items-center">
               <input 
-                className="border border-gray-300 p-1.5 w-1/3 rounded text-sm focus:outline-blue-500" 
+                className="border border-gray-300 p-1 w-1/3 rounded text-xs focus:outline-blue-500" 
                 placeholder="Key (e.g., Sub-system Code)" 
                 value={meta.key} 
                 onChange={(e) => handleMetadataChange(i, 'key', e.target.value)} 
               />
               <input 
-                className="border border-gray-300 p-1.5 flex-1 rounded text-sm focus:outline-blue-500" 
+                className="border border-gray-300 p-1 flex-1 rounded text-xs focus:outline-blue-500" 
                 placeholder="Value" 
                 value={meta.value} 
                 onChange={(e) => handleMetadataChange(i, 'value', e.target.value)} 
@@ -198,7 +198,7 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
       <MediaEditor nodeId={node.id} media={node.media || []} onUpdate={onUpdate} />
 
       <textarea
-        className="border border-gray-300 p-2 w-full rounded mb-3 h-24 focus:outline-blue-500 focus:ring-1 focus:ring-blue-500"
+        className="border border-gray-300 p-1.5 w-full rounded mb-1.5 h-16 text-xs focus:outline-blue-500 focus:ring-1 focus:ring-blue-500"
         placeholder="Text Content..."
         value={node.content}
         onChange={(e) => handleChange('content', e.target.value)}
@@ -207,25 +207,25 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
       <FlowchartEditor nodeId={node.id} flowcharts={node.flowcharts || []} onUpdate={onUpdate} />
       <TableEditor nodeId={node.id} tables={node.tables || []} onUpdate={onUpdate} />
 
-      <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-        <button onClick={handleAddChild} className="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600 shadow-sm transition-colors">
+      <div className="flex flex-wrap gap-1 pt-1.5 border-t border-gray-100">
+        <button onClick={handleAddChild} className="bg-blue-500 text-white px-2 py-1 rounded text-[10px] hover:bg-blue-600 shadow-sm transition-colors">
           + Add Sub-section
         </button>
-        <button onClick={handleAddMetadata} className="bg-orange-500 text-white px-3 py-1.5 rounded text-sm hover:bg-orange-600 shadow-sm transition-colors">
+        <button onClick={handleAddMetadata} className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors">
           + Add Metadata
         </button>
-        <button onClick={handleAddFlowchart} className="bg-purple-500 text-white px-3 py-1.5 rounded text-sm hover:bg-purple-600 shadow-sm transition-colors">
+        <button onClick={handleAddFlowchart} className="bg-purple-500 text-white px-2 py-1 rounded text-[10px] hover:bg-purple-600 shadow-sm transition-colors">
           + Add Flowchart
         </button>
-        <button onClick={handleAddTable} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 shadow-sm transition-colors">
+        <button onClick={handleAddTable} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] hover:bg-green-700 shadow-sm transition-colors">
           + Add Table
         </button>
-        <button onClick={handleAddMedia} className="bg-teal-500 text-white px-3 py-1.5 rounded text-sm hover:bg-teal-600 shadow-sm transition-colors">
+        <button onClick={handleAddMedia} className="bg-teal-500 text-white px-2 py-1 rounded text-[10px] hover:bg-teal-600 shadow-sm transition-colors">
           + Add Media
         </button>
       </div>
 
-      <div className="mt-4 border-l-2 border-blue-200 pl-3">
+      <div className="mt-2 border-l-2 border-blue-200 pl-2">
         {node.children.map((child) => (
           <RecursiveNode 
             key={child.id} 
@@ -445,15 +445,15 @@ export default function DataExtractor({ sop, onClose }) {
   };
 
   return (
-    <div className="flex h-full w-full bg-gray-100 overflow-hidden text-gray-800 font-sans relative" style={{ zoom: '80%' }}>
+    <div className="flex h-full w-full bg-gray-100 overflow-hidden text-gray-800 font-sans relative" >
       {/* Left side: PDF Viewer */}
-      <div className="w-1/2 p-4 flex flex-col border-r border-gray-300 bg-gray-50">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+      <div className="w-1/2 p-2 flex flex-col border-r border-gray-300 bg-gray-50">
+        <h2 className="text-base font-bold mb-2 flex items-center gap-2">
           {sop ? `SOP Viewer: ${sop.sopId || 'Document'}` : "SOP Viewer"}
         </h2>
         {!pdfFile ? (
           <div className="flex-1 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-white shadow-sm">
-            <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="p-4 cursor-pointer" />
+            <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="p-2 cursor-pointer text-sm" />
           </div>
         ) : (
           <iframe src={pdfFile} className="w-full h-full rounded border border-gray-300 bg-white shadow-sm" title="PDF Viewer" />
@@ -461,20 +461,20 @@ export default function DataExtractor({ sop, onClose }) {
       </div>
 
       {/* Right side: Editor & Output */}
-      <div className="w-1/2 p-4 flex flex-col h-full overflow-y-auto bg-gray-200 relative">
-        <div className="flex justify-between items-center mb-4 bg-white p-4 rounded border border-gray-300 shadow-sm shrink-0">
-          <h2 className="text-xl font-bold">Data Extraction</h2>
+      <div className="w-1/2 p-2 flex flex-col h-full overflow-y-auto bg-gray-200 relative">
+        <div className="flex justify-between items-center mb-2 bg-white p-2 rounded border border-gray-300 shadow-sm shrink-0">
+          <h2 className="text-base font-bold">Data Extraction</h2>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {lastSaved && (
-              <span className="text-xs text-emerald-600 mr-2 font-medium bg-emerald-50 px-2 py-1 rounded">
+              <span className="text-[10px] text-emerald-600 mr-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">
                 Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
             
             <button 
               onClick={() => setShowJson(!showJson)} 
-              className={`px-4 py-2 rounded transition-colors shadow-sm font-semibold flex items-center justify-center min-w-[120px] ${showJson ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              className={`px-2 py-1 text-xs rounded transition-colors shadow-sm font-semibold flex items-center justify-center min-w-[80px] ${showJson ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
             >
               {showJson ? 'View Form' : 'View JSON'}
             </button>
@@ -488,20 +488,20 @@ export default function DataExtractor({ sop, onClose }) {
             />
             <button 
               onClick={() => fileInputRef.current?.click()} 
-              className="flex items-center bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors shadow-sm font-semibold"
+              className="flex items-center bg-purple-600 text-white px-2 py-1 text-xs rounded hover:bg-purple-700 transition-colors shadow-sm font-semibold"
             >
               <ImportIcon /> Import
             </button>
 
             <button 
               onClick={copyJsonToClipboard} 
-              className="flex items-center bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors shadow-sm font-semibold"
+              className="flex items-center bg-blue-600 text-white px-2 py-1 text-xs rounded hover:bg-blue-700 transition-colors shadow-sm font-semibold"
             >
               <CopyIcon /> Copy
             </button>
             <button 
               onClick={downloadJson} 
-              className="flex items-center bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors shadow-sm font-semibold"
+              className="flex items-center bg-green-600 text-white px-2 py-1 text-xs rounded hover:bg-green-700 transition-colors shadow-sm font-semibold"
             >
               <DownloadIcon /> Download
             </button>
@@ -509,7 +509,7 @@ export default function DataExtractor({ sop, onClose }) {
             {onClose && (
                <button 
                  onClick={onClose} 
-                 className="ml-2 flex items-center bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-900 transition-colors shadow-sm font-semibold"
+                 className="ml-1 flex items-center bg-slate-800 text-white px-2 py-1 text-xs rounded hover:bg-slate-900 transition-colors shadow-sm font-semibold"
                >
                  Close
                </button>
@@ -519,39 +519,39 @@ export default function DataExtractor({ sop, onClose }) {
 
         <div className="flex-1 overflow-y-auto pb-20">
           {showJson ? (
-            <div className="bg-gray-900 text-green-400 p-4 rounded shadow-inner overflow-auto h-full font-mono text-sm whitespace-pre-wrap">
+            <div className="bg-gray-900 text-green-400 p-3 rounded shadow-inner overflow-auto h-full font-mono text-xs whitespace-pre-wrap">
               {JSON.stringify(documentData, null, 2)}
             </div>
           ) : (
             <>
               {/* Document Root Metadata UI */}
-              <div className="bg-white p-4 rounded border border-gray-300 shadow-sm mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-lg font-bold text-gray-700">Document Root Metadata</h3>
-                  <button onClick={handleAddRootMetadata} className="bg-orange-500 text-white px-3 py-1.5 rounded text-sm hover:bg-orange-600 shadow-sm transition-colors">
+              <div className="bg-white p-2 rounded border border-gray-300 shadow-sm mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-bold text-gray-700">Document Root Metadata</h3>
+                  <button onClick={handleAddRootMetadata} className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors">
                     + Add Root Metadata
                   </button>
                 </div>
                 
                 {documentData.metadata.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No root metadata added (e.g. Doc ID, Author, Effective Date).</p>
+                  <p className="text-[10px] text-gray-400 italic">No root metadata added (e.g. Doc ID, Author, Effective Date).</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {documentData.metadata.map((meta, i) => (
-                      <div key={i} className="flex gap-2 items-center">
+                      <div key={i} className="flex gap-1 items-center">
                         <input 
-                          className="border border-gray-300 p-2 w-1/3 rounded focus:outline-blue-500" 
+                          className="border border-gray-300 p-1 w-1/3 rounded text-xs focus:outline-blue-500" 
                           placeholder="Key (e.g., SOP ID)" 
                           value={meta.key} 
                           onChange={(e) => handleRootMetadataChange(i, 'key', e.target.value)} 
                         />
                         <input 
-                          className="border border-gray-300 p-2 flex-1 rounded focus:outline-blue-500" 
+                          className="border border-gray-300 p-1 flex-1 rounded text-xs focus:outline-blue-500" 
                           placeholder="Value" 
                           value={meta.value} 
                           onChange={(e) => handleRootMetadataChange(i, 'value', e.target.value)} 
                         />
-                        <button onClick={() => handleDeleteRootMetadata(i)} className="text-red-400 hover:text-red-600 p-2 rounded">
+                        <button onClick={() => handleDeleteRootMetadata(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
                           <TrashIcon />
                         </button>
                       </div>
@@ -561,35 +561,35 @@ export default function DataExtractor({ sop, onClose }) {
               </div>
 
               {/* Roles / Filters UI */}
-              <div className="bg-white p-4 rounded border border-gray-300 shadow-sm mb-6">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-lg font-bold text-gray-700">Roles / Flowchart Lenses</h3>
-                  <button onClick={handleAddFilter} className="bg-indigo-500 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-600 shadow-sm transition-colors">
+              <div className="bg-white p-2 rounded border border-gray-300 shadow-sm mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-bold text-gray-700">Roles / Flowchart Lenses</h3>
+                  <button onClick={handleAddFilter} className="bg-indigo-500 text-white px-2 py-1 rounded text-[10px] hover:bg-indigo-600 shadow-sm transition-colors">
                     + Add Role/Filter
                   </button>
                 </div>
                 
                 {(documentData.filters || []).length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No lenses defined. (e.g. Technician, Executive, IPQA)</p>
+                  <p className="text-[10px] text-gray-400 italic">No lenses defined. (e.g. Technician, Executive, IPQA)</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-1.5">
                     {(documentData.filters || []).map((filter, i) => (
-                      <div key={i} className="flex gap-2 items-start bg-gray-50 p-2 rounded border border-gray-200">
+                      <div key={i} className="flex gap-1 items-start bg-gray-50 p-1.5 rounded border border-gray-200">
                         <input 
-                          className="border border-gray-300 p-2 w-1/4 rounded focus:outline-indigo-500 text-sm" 
+                          className="border border-gray-300 p-1 w-1/4 rounded focus:outline-indigo-500 text-xs" 
                           placeholder="Label (e.g., IPQA)" 
                           value={filter.label} 
                           onChange={(e) => handleFilterChange(i, 'label', e.target.value)} 
                         />
                         <input 
-                          className="border border-gray-300 p-2 flex-1 rounded focus:outline-indigo-500 text-sm" 
+                          className="border border-gray-300 p-1 flex-1 rounded focus:outline-indigo-500 text-xs" 
                           placeholder="Keywords (comma separated)" 
                           value={filter.keywords.join(', ')} 
                           onChange={(e) => handleFilterChange(i, 'keywords', e.target.value)} 
                           title="Keywords that trigger this role in a section"
                         />
                         <select 
-                          className="border border-gray-300 p-2 rounded focus:outline-indigo-500 text-sm bg-white capitalize"
+                          className="border border-gray-300 p-1 rounded focus:outline-indigo-500 text-xs bg-white capitalize"
                           value={filter.color}
                           onChange={(e) => handleFilterChange(i, 'color', e.target.value)}
                         >
@@ -597,7 +597,7 @@ export default function DataExtractor({ sop, onClose }) {
                             <option key={c} value={c}>{c}</option>
                           ))}
                         </select>
-                        <button onClick={() => handleDeleteFilter(i)} className="text-red-400 hover:text-red-600 p-2 rounded mt-0.5">
+                        <button onClick={() => handleDeleteFilter(i)} className="text-red-400 hover:text-red-600 p-1 rounded mt-0.5">
                           <TrashIcon />
                         </button>
                       </div>
@@ -607,9 +607,9 @@ export default function DataExtractor({ sop, onClose }) {
               </div>
 
               {/* Sections Header */}
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-gray-700">SOP Sections</h3>
-                <button onClick={addRootSection} className="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 transition-colors shadow-sm">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-bold text-gray-700">SOP Sections</h3>
+                <button onClick={addRootSection} className="bg-gray-800 text-white px-2 py-1 rounded text-[10px] hover:bg-gray-700 transition-colors shadow-sm">
                   + Add Root Section
                 </button>
               </div>

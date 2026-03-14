@@ -30,28 +30,6 @@ const ImportIcon = () => (
 
 const COLOR_OPTIONS = ['blue', 'purple', 'amber', 'emerald', 'rose', 'cyan', 'indigo', 'orange', 'gray'];
 
-// Add this above your DataExtractor component
-const base64toBlob = (base64Data, contentType = 'application/pdf') => {
-  // Strip out the data:application/pdf;base64, prefix if it exists
-  const base64WithoutPrefix = base64Data.replace(/^data:[^;]+;base64,/, '');
-  
-  const byteCharacters = atob(base64WithoutPrefix);
-  const byteArrays = [];
-  const sliceSize = 512; // Process in chunks to avoid memory spikes
-
-  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-    const slice = byteCharacters.slice(offset, offset + sliceSize);
-    const byteNumbers = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-      byteNumbers[i] = slice.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    byteArrays.push(byteArray);
-  }
-
-  return new Blob(byteArrays, { type: contentType });
-};
-
 // --- Helpers to update deeply nested nodes immutably ---
 const updateTree = (nodes, targetId, updater) => {
   return nodes.map((node) => {
@@ -241,7 +219,8 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
 
 // --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
-  const [pdfFile, setPdfFile] = useState(sop?.pdfPathBase64 || null);
+  const [pdfFile, setPdfFile] = useState(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(!!sop?.pdfPathBase64);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const fileInputRef = useRef(null); 
@@ -249,22 +228,41 @@ export default function DataExtractor({ sop, onClose }) {
 
   useEffect(() => {
     let objectUrl = null;
+    let isMounted = true;
 
-    if (sop?.pdfPathBase64) {
-      try {
-        // Convert the base64 string to a Blob
-        const blob = base64toBlob(sop.pdfPathBase64);
-        // Create an optimized local URL for the iframe
-        objectUrl = URL.createObjectURL(blob);
-        setPdfFile(objectUrl);
-      } catch (error) {
-        console.error("Failed to parse PDF Base64 data:", error);
+    const loadPdfAsync = async () => {
+      if (sop?.pdfPathBase64) {
+        setIsPdfLoading(true);
+        try {
+          // Ensure it's formatted as a proper data URI
+          const prefix = 'data:application/pdf;base64,';
+          const dataUri = sop.pdfPathBase64.startsWith('data:') 
+            ? sop.pdfPathBase64 
+            : prefix + sop.pdfPathBase64;
+
+          // Fetch turns the base64 URI into a Blob asynchronously off the main thread
+          const response = await fetch(dataUri);
+          const blob = await response.blob();
+          
+          if (isMounted) {
+            objectUrl = URL.createObjectURL(blob);
+            setPdfFile(objectUrl);
+          }
+        } catch (error) {
+          console.error("Failed to parse PDF Base64 data:", error);
+        } finally {
+          if (isMounted) {
+            setIsPdfLoading(false);
+          }
+        }
       }
-    }
+    };
 
-    // Cleanup function: Revoke the URL when the component unmounts 
-    // or when the SOP changes to prevent memory leaks.
+    loadPdfAsync();
+
+    // Cleanup function
     return () => {
+      isMounted = false;
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
@@ -453,7 +451,14 @@ export default function DataExtractor({ sop, onClose }) {
         </h2>
         {!pdfFile ? (
           <div className="flex-1 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-white shadow-sm">
-            <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="p-2 cursor-pointer text-sm" />
+            {isPdfLoading ? (
+              <div className="flex flex-col items-center gap-3">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <span className="text-sm text-gray-500 font-medium">Processing large document...</span>
+              </div>
+            ) : (
+              <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="p-2 cursor-pointer text-sm" />
+            )}
           </div>
         ) : (
           <iframe src={pdfFile} className="w-full h-full rounded border border-gray-300 bg-white shadow-sm" title="PDF Viewer" />

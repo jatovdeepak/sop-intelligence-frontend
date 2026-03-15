@@ -5,10 +5,13 @@ export default function BuildRag({ sop, onClose }) {
   const [status, setStatus] = useState("loading"); // 'loading', 'success', 'error'
   const [message, setMessage] = useState("");
 
+  // Point to your Express Backend (Node.js) to update MongoDB
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+
   useEffect(() => {
     const triggerEmbedding = async () => {
       try {
-        // Point this to your FastAPI RAG service port (e.g., 8000)
+        // Point this to your FastAPI RAG service port
         const RAG_API_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
         
         // 1. Sanitize the document ID for ChromaDB (replace spaces with underscores, lowercase it)
@@ -20,10 +23,8 @@ export default function BuildRag({ sop, onClose }) {
         if (Array.isArray(sop.data)) {
           sectionsArray = sop.data;
         } else if (sop.data && Array.isArray(sop.data.sections)) {
-          // If data is an object like {"sections": [...]}, grab the array
           sectionsArray = sop.data.sections;
         } else if (sop.data && typeof sop.data === 'object') {
-           // Fallback if the object itself acts as the root node wrapper
            sectionsArray = [sop.data];
         } else if (Array.isArray(sop.sections)) {
            sectionsArray = sop.sections;
@@ -34,6 +35,7 @@ export default function BuildRag({ sop, onClose }) {
           sections: sectionsArray, 
         };
 
+        // --- STEP 1: Embed in ChromaDB ---
         const response = await fetch(`${RAG_API_URL}/api/embed-sop`, {
           method: "POST",
           headers: {
@@ -46,6 +48,29 @@ export default function BuildRag({ sop, onClose }) {
 
         if (!response.ok) {
           throw new Error(data.detail || "Failed to embed SOP data.");
+        }
+
+        // --- STEP 2: Update MongoDB via Node.js Backend ---
+        try {
+          const token = localStorage.getItem("token");
+          // Assuming you have a PUT or PATCH route like /api/sops/:id to update an SOP
+          const dbUpdateResponse = await fetch(`${API_URL}/api/sops/${sop._id}`, {
+            method: "PUT", // Change to "PUT" if your Express route requires it
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              embeddingId: data.id, // The safe ID returned from FastAPI
+              embeddingStatus: data.embeddingStatus // "completed" returned from FastAPI
+            }),
+          });
+
+          if (!dbUpdateResponse.ok) {
+            console.warn("RAG embedded successfully, but MongoDB update failed.");
+          }
+        } catch (dbError) {
+          console.error("Error updating MongoDB:", dbError);
         }
 
         setStatus("success");

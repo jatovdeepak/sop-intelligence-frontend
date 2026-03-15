@@ -24,7 +24,7 @@ const getYouTubeEmbedUrl = (url) => {
   return url; // Fallback to the original URL if parsing fails
 };
 
-// Helper function to convert Google Drive view links to embeddable preview links (for ALL Drive media)
+// Helper function to convert Google Drive view links to embeddable preview links
 const getDriveEmbedUrl = (url) => {
   try {
     const urlObj = new URL(url);
@@ -51,7 +51,12 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
-  const API_URL = import.meta.env.VITE_API_RAG_URL || "";
+  // Pointing directly to your FastAPI RAG backend
+  const API_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
+
+  // --- DERIVED SOP ID (Sanitized for ChromaDB) ---
+  const rawId = sop?.sopId || sop?._id || "unknown";
+  const safeDocumentId = rawId.toString().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -71,7 +76,8 @@ export default function ChatWithSOP({ sop, onClose }) {
   // --- API FUNCTIONS ---
   const fetchHistory = async (id) => {
     try {
-      const res = await fetch(`${API_URL}/user/history/${id}`);
+      // 👈 CRITICAL FIX: Fetch isolated history using both user_id and document_id
+      const res = await fetch(`${API_URL}/user/history/${id}/${safeDocumentId}`);
       if (!res.ok) return;
       const data = await res.json();
       
@@ -129,6 +135,7 @@ export default function ChatWithSOP({ sop, onClose }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
+          document_id: safeDocumentId, // <-- Tells the backend which SOP to query!
           question: currentQuestion,
           skip_cache: skipCache,
         }),
@@ -287,7 +294,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                             const isYouTube = src.includes("youtu.be") || src.includes("youtube.com");
                             const isDrive = src.includes("drive.google.com");
                             
-                            // 1. IFRAME RENDERER (For YouTube, Drive Videos, AND Drive Images)
+                            // 1. IFRAME RENDERER
                             if (alt === 'VIDEO' || isYouTube || isDrive) {
                               return (
                                 <div className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-lg shadow-sm">
@@ -320,7 +327,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                               );
                             }
                             
-                            // 2. STANDARD IMAGE RENDERER (For normal web images)
+                            // 2. STANDARD IMAGE RENDERER
                             return (
                               <div className="my-4 max-w-lg">
                                 <img src={src} alt={alt} className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[400px]" />
@@ -365,7 +372,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                                           </div>
                                         </div>
                                       ) : (
-                                        // Standard image fallback
                                         <div className="relative group cursor-pointer" onClick={() => window.open(m.url, '_blank')}>
                                           <img src={m.url} alt={m.caption || 'SOP Reference'} className="w-full h-40 object-cover hover:opacity-90 transition-opacity" />
                                           <div className="absolute top-2 right-2 bg-black/60 p-1 rounded backdrop-blur-sm">
@@ -376,7 +382,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                                       {m.caption && m.caption !== 'None' && (
                                         <div className="p-2 text-xs text-slate-600 bg-slate-50 flex-1 border-t border-slate-100 flex justify-between items-center">
                                           <span className="truncate mr-2">{m.caption}</span>
-                                          {isDrive && <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline flex-shrink-0">Open</a>}
+                                          {(isDrive || isYouTube) && <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline flex-shrink-0">Open</a>}
                                         </div>
                                       )}
                                     </div>
@@ -387,7 +393,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                           );
                         })()
                       )}
-                      {/* ----------------------------- */}
 
                       {msg.isApproved && (
                         <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-800 flex flex-col gap-1.5">

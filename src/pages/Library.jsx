@@ -7,7 +7,8 @@ import {
   ShieldCheck,
   GitBranch,
   Trash2,
-  FileJson, // <-- NEW IMPORT
+  FileJson,
+  Database, // <-- NEW ICON FOR BUILD RAG
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
@@ -15,8 +16,9 @@ import ChatWithSOP from "../components/ChatWithSOP";
 import AddSOPModal from "../components/AddSOPModal";
 import EditSOPModal from "../components/EditSOPModal";
 import SOPFlowchart from "../components/SOPFlowchart";
-import DataExtractor from "../sop-data-extractor/DataExtractor"; // <-- NEW IMPORT
-import PDFViewerModal from "../components/PDFViewerModal"; // Adjust path if needed
+import DataExtractor from "../sop-data-extractor/DataExtractor";
+import PDFViewerModal from "../components/PDFViewerModal";
+import BuildRag from "../components/BuildRag"; // <-- NEW IMPORT
 
 export default function Library() {
   const [showCompliance, setShowCompliance] = useState(false);
@@ -24,7 +26,8 @@ export default function Library() {
   const [showAddSOP, setShowAddSOP] = useState(false);
   const [showEditSOP, setShowEditSOP] = useState(false);
   const [showFlowchart, setShowFlowchart] = useState(false);
-  const [showExtractor, setShowExtractor] = useState(false); // <-- NEW STATE
+  const [showExtractor, setShowExtractor] = useState(false);
+  const [showBuildRag, setShowBuildRag] = useState(false); // <-- NEW STATE
   const [selectedSop, setSelectedSop] = useState(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
 
@@ -85,7 +88,7 @@ export default function Library() {
     }
   };
 
-  // ADDED onExtract prop
+  // ADDED onBuildRag prop
   function ActionsMenu({
     onCompliance,
     onChat,
@@ -93,6 +96,7 @@ export default function Library() {
     onEdit,
     onDelete,
     onExtract,
+    onBuildRag, // <-- NEW PROP
   }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -124,7 +128,7 @@ export default function Library() {
                 setOpen(false);
               }}
             />
-            {/* NEW MENU ITEM */}
+            
             <MenuItem
               icon={FileJson}
               label="Data Extractor"
@@ -133,6 +137,17 @@ export default function Library() {
                 setOpen(false);
               }}
             />
+
+            {/* NEW MENU ITEM FOR BUILD RAG */}
+            <MenuItem
+              icon={Database}
+              label="Build RAG Context"
+              onClick={() => {
+                onBuildRag();
+                setOpen(false);
+              }}
+            />
+
             <MenuItem icon={History} label="View Version" />
             <MenuItem
               icon={MessageSquare}
@@ -306,7 +321,6 @@ export default function Library() {
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-4">
-                      {/* Change this block */}
                       <button
                         onClick={() => {
                           setSelectedSop(row);
@@ -324,9 +338,13 @@ export default function Library() {
                         }}
                         onDelete={() => handleDeleteSOP(row._id)}
                         onExtract={() => {
-                          // <-- NEW HOOK IN MAP
                           setSelectedSop(row);
                           setShowExtractor(true);
+                        }}
+                        onBuildRag={() => {
+                          // <-- TRIGGER NEW MODAL HERE
+                          setSelectedSop(row);
+                          setShowBuildRag(true);
                         }}
                         onCompliance={() => {
                           setSelectedSop(row);
@@ -373,7 +391,16 @@ export default function Library() {
 
       {/* Modals */}
 
-      {/* NEW: Data Extractor Modal */}
+      {/* NEW: Build RAG Modal */}
+      {showBuildRag && selectedSop && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <BuildRag
+            sop={selectedSop}
+            onClose={() => setShowBuildRag(false)}
+          />
+        </div>
+      )}
+
       {showExtractor && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="relative w-full h-full max-h-screen rounded-2xl bg-white shadow-2xl overflow-hidden">
@@ -381,7 +408,7 @@ export default function Library() {
               sop={selectedSop}
               onClose={() => {
                 setShowExtractor(false);
-                fetchSOPs(); // Fetch to update last modified dates
+                fetchSOPs();
               }}
             />
           </div>
@@ -429,7 +456,6 @@ export default function Library() {
         />
       )}
 
-      {/* NEW: PDF Viewer Modal */}
       {showPdfViewer && selectedSop && (
         <PDFViewerModal
           sop={selectedSop}

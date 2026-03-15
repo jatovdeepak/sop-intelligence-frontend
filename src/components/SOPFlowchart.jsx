@@ -27,7 +27,6 @@ import {
   Image as ImageIcon,
   Play,
   Video,
-  ExternalLink,
   ChevronLeft,
   ChevronRight,
   Maximize2
@@ -36,23 +35,8 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import 'reactflow/dist/style.css';
 
-// --- HELPER FUNCTION FOR GOOGLE DRIVE ---
-const getDriveEmbedUrl = (url) => {
-  try {
-    const urlObj = new URL(url);
-    if (urlObj.hostname.includes("drive.google.com")) {
-      const parts = urlObj.pathname.split('/');
-      const dIndex = parts.indexOf('d');
-      if (dIndex !== -1 && parts.length > dIndex + 1) {
-        const fileId = parts[dIndex + 1];
-        return `https://drive.google.com/file/d/${fileId}/preview`;
-      }
-    }
-  } catch (e) {
-    console.error("Invalid Drive URL", e);
-  }
-  return url;
-};
+// --- IMPORT THE EXTERNAL MEDIA MODAL ---
+import MediaModal from "../components/MediaModal"; 
 
 // Context to share the active filter state, layout direction, action handlers, tooltip state, color map, and media modal
 export const FlowContext = createContext({ 
@@ -693,97 +677,9 @@ const StepNode = ({ id, data }) => {
               className="flex gap-2 overflow-x-auto pb-1.5 nodrag [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory"
             >
               {data.media.map((item, idx) => {
-                const isYouTube = item.url.includes('youtube.com') || item.url.includes('youtu.be');
-                const isDrive = item.url.includes('drive.google.com');
+                const isVideo = item.type === 'video' || item.url.match(/\.(mp4|webm|ogg)$/i);
 
-                // Generate a visual thumbnail for Google Drive links
-                if (isDrive) {
-                  return (
-                    <div 
-                      key={idx} 
-                      onClick={(e) => handleMediaClick(e, item)}
-                      className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-white cursor-pointer snap-start"
-                    >
-                      <iframe 
-                        src={getDriveEmbedUrl(item.url)} 
-                        className="w-full h-full pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity"
-                        tabIndex="-1"
-                        title="Google Drive Preview"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/5 group-hover:bg-transparent transition-colors">
-                        <div className="bg-blue-600/90 backdrop-blur-sm text-white rounded-full p-2 shadow-sm group-hover:scale-110 transition-transform">
-                          <ExternalLink size={14} />
-                        </div>
-                      </div>
-                      <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Maximize2 size={12} />
-                      </div>
-                      {item.caption && (
-                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate z-10">
-                          {item.caption}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                if (item.type === 'image') {
-                  return (
-                    <div 
-                      key={idx} 
-                      onClick={(e) => handleMediaClick(e, item)}
-                      className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block cursor-pointer snap-start"
-                    >
-                      <img 
-                        src={item.url} 
-                        alt={item.caption || `Image ${idx + 1}`} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-slate-100" 
-                      />
-                      <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Maximize2 size={12} />
-                      </div>
-                      {item.caption && (
-                        <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-1 truncate">
-                          {item.caption}
-                        </div>
-                      )}
-                    </div>
-                  );
-                } 
-
-                if (item.type === 'video') {
-                  if (isYouTube) {
-                    const ytId = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1];
-                    const thumbUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
-
-                    return (
-                      <div 
-                        key={idx} 
-                        onClick={(e) => handleMediaClick(e, item)}
-                        className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block bg-slate-900 cursor-pointer snap-start"
-                      >
-                        {thumbUrl ? (
-                          <img src={thumbUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" alt="Video Thumbnail" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                            <Video size={24} className="text-slate-400" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                           <div className="bg-red-600 text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                             <Play fill="currentColor" size={14} className="ml-0.5" />
-                           </div>
-                        </div>
-                        <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Maximize2 size={12} />
-                        </div>
-                        <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent text-white text-[9px] px-1.5 pt-4 pb-1 truncate">
-                          {item.caption || 'YouTube Video'}
-                        </div>
-                      </div>
-                    );
-                  } 
-                  
+                if (isVideo) {
                   return (
                     <div 
                       key={idx} 
@@ -811,7 +707,29 @@ const StepNode = ({ id, data }) => {
                     </div>
                   );
                 }
-                return null;
+                
+                // Otherwise treat it as an image
+                return (
+                  <div 
+                    key={idx} 
+                    onClick={(e) => handleMediaClick(e, item)}
+                    className="relative w-36 h-24 rounded-lg border border-slate-200 overflow-hidden shrink-0 group block cursor-pointer snap-start"
+                  >
+                    <img 
+                      src={item.url} 
+                      alt={item.caption || `Image ${idx + 1}`} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 bg-slate-100" 
+                    />
+                    <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Maximize2 size={12} />
+                    </div>
+                    {item.caption && (
+                      <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-1 truncate">
+                        {item.caption}
+                      </div>
+                    )}
+                  </div>
+                );
               })}
             </div>
           </div>
@@ -843,7 +761,7 @@ const StepNode = ({ id, data }) => {
              "h-6 w-6 rounded-full flex items-center justify-center transition-colors text-xs",
              isHovered ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"
            )}>
-              <span>→</span>
+             <span>→</span>
            </div>
         </div>
 
@@ -1164,89 +1082,6 @@ function FlowchartInstance({ sop, openMediaModal }) {
     </div>
   );
 }
-
-// Media Modal Component
-const MediaModal = ({ mediaItem, onClose }) => {
-  if (!mediaItem) return null;
-
-  const isYouTube = mediaItem.type === 'video' && (mediaItem.url.includes('youtube.com') || mediaItem.url.includes('youtu.be'));
-  const ytId = isYouTube ? mediaItem.url.match(/(?:youtu\.be\/|youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=))([^"&?\/\s]{11})/)?.[1] : null;
-  const isDrive = mediaItem.url.includes('drive.google.com');
-
-  return (
-    <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl max-h-full flex flex-col bg-black rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
-        
-        {/* Header */}
-        <div className="absolute top-0 w-full flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent z-10">
-          <div className="text-white text-sm font-medium px-2 drop-shadow-md">
-            {mediaItem.caption || 'Media Viewer'}
-          </div>
-          <button 
-            onClick={onClose}
-            className="p-2 bg-black/50 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-[50vh] p-4 md:p-8">
-          
-          {isDrive && (
-            <iframe 
-              src={getDriveEmbedUrl(mediaItem.url)} 
-              className="w-full h-full min-h-[65vh] rounded-lg bg-white"
-              allow="autoplay"
-              allowFullScreen
-            />
-          )}
-
-          {!isDrive && mediaItem.type === 'image' && (
-            <img 
-              src={mediaItem.url} 
-              alt={mediaItem.caption || 'Expanded media'} 
-              className="max-w-full max-h-[85vh] object-contain"
-            />
-          )}
-
-          {!isDrive && mediaItem.type === 'video' && isYouTube && ytId && (
-            <iframe 
-              src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} 
-              className="w-full h-full min-h-[60vh] rounded-lg bg-black"
-              frameBorder="0" 
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-              allowFullScreen
-            />
-          )}
-
-          {!isDrive && mediaItem.type === 'video' && !isYouTube && (
-            <video 
-              src={mediaItem.url} 
-              controls 
-              autoPlay
-              className="max-w-full max-h-[85vh] rounded-lg"
-            />
-          )}
-        </div>
-
-        {/* Action Buttons for Fallback (Specifically useful for Drive files that block iframes) */}
-        {isDrive && (
-          <div className="absolute bottom-6 right-6 z-20">
-             <a 
-               href={mediaItem.url} 
-               target="_blank" 
-               rel="noopener noreferrer"
-               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium transition-colors"
-             >
-               <ExternalLink size={16} /> Open in Google Drive
-             </a>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 export default function SOPFlowchart({ sop, onClose }) {
   const headerTitle = sop?.title || 'SOP Flow Map';

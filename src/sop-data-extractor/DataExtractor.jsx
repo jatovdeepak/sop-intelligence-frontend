@@ -304,7 +304,10 @@ export default function DataExtractor({ sop, onClose }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ data: documentData }) 
+          body: JSON.stringify({ 
+            data: documentData,
+            lastExtractedTime: new Date().toISOString() // <-- NEW: Send current timestamp on every auto-save
+          }) 
         });
 
         if (response.ok) {

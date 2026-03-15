@@ -1,9 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader2, CheckCircle2, XCircle, X } from "lucide-react";
+import toast from "react-hot-toast"; // Added toast import
 
 export default function BuildRag({ sop, onClose }) {
   const [status, setStatus] = useState("loading"); // 'loading', 'success', 'error'
   const [message, setMessage] = useState("");
+  
+  // Use a ref to prevent double-firing in React StrictMode
+  const hasTriggered = useRef(false);
 
   // Point to your Express Backend (Node.js) to update MongoDB
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
@@ -16,7 +20,7 @@ export default function BuildRag({ sop, onClose }) {
         
         // 1. Sanitize the document ID for ChromaDB (replace spaces with underscores, lowercase it)
         const rawId = sop.sopId || sop._id;
-        const safeDocumentId = rawId.toString().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+        let safeDocumentId = rawId.toString().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
 
         // 2. Safely extract the sections array from the 'data' object
         let sectionsArray = [];
@@ -53,38 +57,67 @@ export default function BuildRag({ sop, onClose }) {
         // --- STEP 2: Update MongoDB via Node.js Backend ---
         try {
           const token = localStorage.getItem("token");
-          // Assuming you have a PUT or PATCH route like /api/sops/:id to update an SOP
           const dbUpdateResponse = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-            method: "PUT", // Change to "PUT" if your Express route requires it
+            method: "PUT", 
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              embeddingId: data.id, // The safe ID returned from FastAPI
-              embeddingStatus: data.embeddingStatus // "completed" returned from FastAPI
+              embeddingId: data.id || safeDocumentId, 
+              embeddingStatus: data.embeddingStatus || "completed", 
+              lastRagBuildTime: data.lastRagBuildTime || new Date().toISOString()
             }),
           });
 
           if (!dbUpdateResponse.ok) {
             console.warn("RAG embedded successfully, but MongoDB update failed.");
+            toast.error("RAG built, but failed to sync status with database.");
           }
         } catch (dbError) {
           console.error("Error updating MongoDB:", dbError);
+          toast.error("Database sync failed.");
         }
 
+        const successMsg = data.message || `Successfully embedded SOP ${safeDocumentId}`;
         setStatus("success");
-        setMessage(data.message || `Successfully embedded SOP ${safeDocumentId}`);
+        setMessage(successMsg);
+        toast.success("RAG database updated successfully!"); // Success toast
+        
+        // --- NEW: Auto-close and open chat after success ---
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+
       } catch (err) {
+        const errorMsg = err.message || "An unexpected error occurred.";
         setStatus("error");
-        setMessage(err.message || "An unexpected error occurred.");
+        setMessage(errorMsg);
+        toast.error(errorMsg); // Error toast
       }
     };
 
-    if (sop) {
-      triggerEmbedding();
+    if (sop && !hasTriggered.current) {
+      hasTriggered.current = true;
+
+      // --- NEW: Time Comparison Logic ---
+      const extractedTime = new Date(sop.lastExtractedTime || 0).getTime();
+      const ragTime = new Date(sop.lastRagBuildTime || 0).getTime();
+
+      // If extraction is newer than the last build (or it's never been built), build it
+      if (extractedTime > ragTime) {
+        triggerEmbedding();
+      } else {
+        // Already up to date! Skip building and just open the chat
+        setStatus("success");
+        setMessage("RAG memory is already up to date!");
+        toast.success("RAG memory is up to date!"); // Skip toast
+        setTimeout(() => {
+          onClose();
+        }, 1000);
+      }
     }
-  }, [sop]);
+  }, [sop, onClose]);
 
   return (
     <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
@@ -111,12 +144,9 @@ export default function BuildRag({ sop, onClose }) {
             <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-4" />
             <h3 className="text-lg font-semibold text-slate-800">RAG Ready!</h3>
             <p className="mt-2 text-sm text-slate-500">{message}</p>
-            <button
-              onClick={onClose}
-              className="mt-6 w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 transition"
-            >
-              Done
-            </button>
+            <p className="mt-4 text-xs font-medium text-emerald-600 animate-pulse">
+              Opening chat...
+            </p>
           </>
         )}
 

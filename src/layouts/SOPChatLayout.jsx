@@ -7,10 +7,8 @@ import BuildRag from "../components/BuildRag";
 export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-  // 1. Keep a local copy of the SOP so we can update it without closing the modal
   const [localSop, setLocalSop] = useState(sop);
 
-  // 2. A smarter check to see if the data is TRULY empty
   const checkIsDataEmpty = (dataToCheck) => {
     if (!dataToCheck) return true;
     if (Array.isArray(dataToCheck) && dataToCheck.length === 0) return true;
@@ -23,7 +21,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
         if (dataToCheck.sections.length === 1) {
           const firstSection = dataToCheck.sections[0];
           if (!firstSection.title && !firstSection.content && (!firstSection.children || firstSection.children.length === 0)) {
-            return true; // Empty default section
+            return true;
           }
         }
       }
@@ -33,18 +31,20 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
 
   const isDataEmpty = checkIsDataEmpty(localSop?.data);
   const isRagReady = localSop?.embeddingStatus === "completed";
+  
+  // Compare timestamps for initial load
+  const extractedTime = new Date(localSop?.lastExtractedTime || 0).getTime();
+  const ragTime = new Date(localSop?.lastRagBuildTime || 0).getTime();
+  const needsRebuild = extractedTime > ragTime;
 
-  // State to control what is currently visible on screen
-  const [view, setView] = useState(isDataEmpty || !isRagReady ? "setup" : "chat");
+  // Initialize view based on data and timestamps
+  const [view, setView] = useState(() => {
+    if (isDataEmpty) return "setup";
+    if (needsRebuild || !isRagReady) return "rag"; // Auto-open RAG modal if out of date!
+    return "chat";
+  });
 
-  // Keep view updated if localSop updates naturally
-  useEffect(() => {
-    if (!isDataEmpty && isRagReady && view === "setup") {
-      setView("chat");
-    }
-  }, [isDataEmpty, isRagReady, view]);
-
-  // 3. Function to pull the freshest data from your DB when either Extractor or RAG closes
+  // Pull the freshest data when Extractor or RAG closes
   const handleUpdateClose = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -54,16 +54,21 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
       
       if (res.ok) {
         const updatedSop = await res.json();
-        setLocalSop(updatedSop); // Update local state
+        setLocalSop(updatedSop); 
         
-        // Decide where to go next based on fresh data
         const stillEmpty = checkIsDataEmpty(updatedSop.data);
+        const newExtracted = new Date(updatedSop.lastExtractedTime || 0).getTime();
+        const newRag = new Date(updatedSop.lastRagBuildTime || 0).getTime();
+        const stillNeedsRebuild = newExtracted > newRag;
         const nowRagReady = updatedSop.embeddingStatus === "completed";
         
-        if (stillEmpty || !nowRagReady) {
-          setView("setup"); // Missing something, stay on dashboard
+        // Decide next step automatically
+        if (stillEmpty) {
+          setView("setup"); 
+        } else if (stillNeedsRebuild || !nowRagReady) {
+          setView("rag"); // Auto-trigger Build if it failed or isn't done
         } else {
-          setView("chat"); // All good, launch chat!
+          setView("chat"); // Success! Launch chat.
         }
       } else {
         setView("setup");
@@ -73,43 +78,33 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
       setView("setup");
     }
 
-    if (onRefresh) onRefresh(); // Quietly update the background Library table
+    if (onRefresh) onRefresh(); 
   };
 
   // --- RENDER VIEWS ---
 
-  // 1. Render Data Extractor
   if (view === "extractor") {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="relative w-full h-full max-h-screen rounded-2xl bg-white shadow-2xl overflow-hidden">
-          <DataExtractor
-            sop={localSop}
-            onClose={handleUpdateClose} // Fetch on close
-          />
+          <DataExtractor sop={localSop} onClose={handleUpdateClose} />
         </div>
       </div>
     );
   }
 
-  // 2. Render Build RAG Modal
   if (view === "rag") {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <BuildRag
-          sop={localSop}
-          onClose={handleUpdateClose} // Fetch on close
-        />
+        <BuildRag sop={localSop} onClose={handleUpdateClose} />
       </div>
     );
   }
 
-  // 3. Render Chat Modal
   if (view === "chat") {
     return <ChatWithSOP sop={localSop} onClose={onClose} />;
   }
 
-  // 4. Render Setup Dashboard
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="flex h-[90vh] w-[900px] flex-col rounded-2xl bg-white shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -166,23 +161,22 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
             </div>
 
             {/* Step 2: Build RAG */}
-            <div className={`p-5 rounded-xl border shadow-sm flex items-center justify-between transition-colors ${isRagReady ? "bg-emerald-50/50 border-emerald-100" : "bg-white border-slate-200"}`}>
+            <div className={`p-5 rounded-xl border shadow-sm flex items-center justify-between transition-colors ${!needsRebuild && isRagReady ? "bg-emerald-50/50 border-emerald-100" : "bg-white border-slate-200"}`}>
               <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-lg ${isRagReady ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"}`}>
-                  {isRagReady ? <CheckCircle2 className="w-6 h-6" /> : <Database className="w-6 h-6" />}
+                <div className={`p-3 rounded-lg ${!needsRebuild && isRagReady ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"}`}>
+                  {!needsRebuild && isRagReady ? <CheckCircle2 className="w-6 h-6" /> : <Database className="w-6 h-6" />}
                 </div>
                 <div>
-                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${isRagReady ? "text-emerald-600" : "text-blue-500"}`}>Step 2</div>
+                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${!needsRebuild && isRagReady ? "text-emerald-600" : "text-blue-500"}`}>Step 2</div>
                   <div className="font-semibold text-slate-800 text-lg">Build RAG</div>
                   <div className="text-xs flex items-center gap-2 mt-1">
                     <span className="text-slate-500">Status:</span>
                     <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wide ${
+                      needsRebuild ? "bg-amber-100 text-amber-700" :
                       isRagReady ? "bg-emerald-100 text-emerald-700" :
-                      localSop?.embeddingStatus === "Pending" ? "bg-amber-100 text-amber-700" :
-                      localSop?.embeddingStatus === "Failed" ? "bg-red-100 text-red-700" :
                       "bg-slate-100 text-slate-500"
                     }`}>
-                      {localSop?.embeddingStatus || "Not Embedded"}
+                      {needsRebuild ? "Out of Date" : (localSop?.embeddingStatus || "Not Embedded")}
                     </span>
                   </div>
                 </div>
@@ -192,16 +186,16 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
                 disabled={isDataEmpty}
                 className={`px-5 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
                   isDataEmpty ? "bg-slate-100 text-slate-400 cursor-not-allowed" : 
-                  isRagReady ? "bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50" :
+                  !needsRebuild && isRagReady ? "bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50" :
                   "bg-blue-100 text-blue-600 hover:bg-blue-200"
                 }`}
               >
-                {isRagReady ? "Re-Build RAG" : "Run Build"}
+                {!needsRebuild && isRagReady ? "Re-Build RAG" : "Run Build"}
               </button>
             </div>
 
             {/* Jump to Chat Button */}
-            {!isDataEmpty && isRagReady && (
+            {!isDataEmpty && isRagReady && !needsRebuild && (
               <button 
                 onClick={() => setView("chat")} 
                 className="w-full mt-6 flex items-center justify-center gap-2 bg-emerald-500 text-white p-3 rounded-xl font-bold hover:bg-emerald-600 transition shadow-sm"

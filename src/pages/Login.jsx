@@ -27,6 +27,8 @@ export default function Login() {
         // Store JWT and role in localStorage
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", data.role);
+        window.dispatchEvent(new Event("tokenUpdated"));
+
         navigate("/"); // Redirect to dashboard
       } else {
         setError(data.message || "Invalid credentials");

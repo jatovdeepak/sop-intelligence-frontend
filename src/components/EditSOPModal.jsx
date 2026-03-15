@@ -6,7 +6,9 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
   const [toast, setToast] = useState(null); 
   const [availableSops, setAvailableSops] = useState([]);
 
+  // Environment variables
   const API_URL = import.meta.env.VITE_API_BASE_URL || "";
+  const STORAGE_URL = import.meta.env.VITE_API_STORAGE_SERVER || "http://localhost:5001";
   
   // Form state tracking initialized with the existing SOP data
   const [formData, setFormData] = useState({
@@ -78,7 +80,7 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
     e.preventDefault();
     setToast(null);
 
-    // PDF is no longer required for edits
+    // PDF is no longer required for edits, but title and type are
     if (!formData.title || !formData.type) {
       showToast("error", "Please fill in all required fields.");
       return;
@@ -87,35 +89,53 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
     setLoading(true);
 
     try {
-      const data = new FormData();
-      data.append("title", formData.title);
-      data.append("type", formData.type);
-      data.append("version", formData.version);
-      data.append("description", formData.description);
-      data.append("status", formData.status);
-      
-      // Stringify the array so it passes through FormData properly
-      data.append("references", JSON.stringify(formData.references));
+      // Default to existing PDF data from the SOP prop
+      let fileUrl = sop.pdfPath;
+      let pdfbase64 = sop.pdfPathBase64;
 
-      // Preserve existing roles if not being edited in the form
-      if (sop.requiredRoles) {
-        data.append("requiredRoles", typeof sop.requiredRoles === 'string' ? sop.requiredRoles : sop.requiredRoles.join(', '));
-      }
-
-      // Only append a new PDF if the user selected one
+      // STEP 1: If the user selected a new file, upload it to the Storage Microservice
       if (pdfFile) {
-        data.append("pdf", pdfFile);
+        const fileUploadData = new FormData();
+        fileUploadData.append("file", pdfFile); // "file" must match multer config on storage server
+
+        const uploadRes = await fetch(`${STORAGE_URL}/api/upload`, {
+          method: "POST",
+          body: fileUploadData,
+        });
+
+        const uploadJson = await uploadRes.json();
+
+        if (!uploadRes.ok) {
+          throw new Error(uploadJson.error || "Failed to upload new file to storage server");
+        }
+
+        fileUrl = uploadJson.url;
+        pdfbase64 = uploadJson.pdfBase64;
       }
+
+      // STEP 2: Structure the data as standard JSON, matching the Add modal
+      const sopData = {
+        title: formData.title,
+        type: formData.type,
+        version: formData.version,
+        description: formData.description,
+        status: formData.status,
+        references: formData.references,
+        requiredRoles: sop.requiredRoles, // Preserve existing roles
+        pdfPath: fileUrl, // Will be the new URL or the old one
+        pdfPathBase64: pdfbase64 
+      };
 
       const token = localStorage.getItem("token");
 
-      // Use PUT to update the specific SOP
+      // STEP 3: Send as application/json to main API
       const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
         method: "PUT",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`, 
         },
-        body: data,
+        body: JSON.stringify(sopData),
       });
 
       const result = await response.json();

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MediaModal from '../components/MediaModal'; // Make sure this path is correct based on your folder structure
 
 // --- Icons ---
 const TrashIcon = () => (
@@ -19,6 +20,13 @@ const UploadIcon = () => (
   </svg>
 );
 
+const EyeIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+);
+
 const SpinnerIcon = () => (
   <svg className="animate-spin w-4 h-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -28,6 +36,7 @@ const SpinnerIcon = () => (
 
 export default function MediaEditor({ nodeId, media = [], onUpdate }) {
   const [uploadingIndex, setUploadingIndex] = useState(null);
+  const [previewMedia, setPreviewMedia] = useState(null); // State for the modal
   const API_URL = import.meta.env.VITE_API_STORAGE_SERVER || "http://localhost:5001";
 
   const handleMediaChange = (index, field, value) => {
@@ -72,7 +81,17 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
       const uploadedUrl = data.url || data.fileUrl; 
 
       if (uploadedUrl) {
+        // 1. Save the URL
         handleMediaChange(index, 'url', uploadedUrl);
+
+        // 2. Automatically update the dropdown type based on the backend mimetype
+        if (data.mimetype) {
+          if (data.mimetype.startsWith('video/')) {
+            handleMediaChange(index, 'type', 'video');
+          } else if (data.mimetype.startsWith('image/')) {
+            handleMediaChange(index, 'type', 'image');
+          }
+        }
       } else {
         console.warn("Upload succeeded, but no URL was returned from the server.");
       }
@@ -108,61 +127,81 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
   if (!media || media.length === 0) return null;
 
   return (
-    <div className="mb-3 space-y-2 bg-blue-50 p-3 rounded border border-blue-200">
-      <label className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-2 flex items-center gap-1">
-        <MediaIcon /> Section Media
-      </label>
-      {media.map((m, i) => (
-        <div key={i} className="flex gap-2 items-center">
-          <select 
-            className="border border-gray-300 p-1.5 rounded text-sm focus:outline-blue-500 bg-white"
-            value={m.type}
-            onChange={(e) => handleMediaChange(i, 'type', e.target.value)}
-          >
-            <option value="image">Image</option>
-            <option value="video">Video</option>
-          </select>
-          
-          {/* URL Input + Hidden File Input Wrapper */}
-          <div className="flex flex-1 items-center gap-1 border border-gray-300 rounded focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 overflow-hidden bg-white pr-1 transition-all">
-            <input 
-              className="p-1.5 flex-1 text-sm outline-none w-full" 
-              placeholder="Media URL, Upload, or Paste Image Here" 
-              value={m.url} 
-              onChange={(e) => handleMediaChange(i, 'url', e.target.value)} 
-              onPaste={(e) => handlePaste(e, i)} // Attach the paste handler here
-              disabled={uploadingIndex === i}
-            />
-            
-            <input
-              type="file"
-              accept={m.type === 'image' ? 'image/*' : 'video/*'}
-              className="hidden"
-              id={`media-upload-${nodeId}-${i}`}
-              onChange={(e) => handleFileUpload(i, e.target.files[0])}
-              disabled={uploadingIndex === i}
-            />
-            
-            <label
-              htmlFor={`media-upload-${nodeId}-${i}`}
-              className={`cursor-pointer p-1 rounded transition-colors ${uploadingIndex === i ? 'text-gray-400' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'}`}
-              title="Upload File"
+    <>
+      <div className="mb-3 space-y-2 bg-blue-50 p-3 rounded border border-blue-200">
+        <label className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-2 flex items-center gap-1">
+          <MediaIcon /> Section Media
+        </label>
+        {media.map((m, i) => (
+          <div key={i} className="flex gap-2 items-center">
+            <select 
+              className="border border-gray-300 p-1.5 rounded text-sm focus:outline-blue-500 bg-white"
+              value={m.type}
+              onChange={(e) => handleMediaChange(i, 'type', e.target.value)}
             >
-              {uploadingIndex === i ? <SpinnerIcon /> : <UploadIcon />}
-            </label>
-          </div>
+              <option value="image">Image</option>
+              <option value="video">Video</option>
+            </select>
+            
+            {/* URL Input + Hidden File Input Wrapper */}
+            <div className="flex flex-1 items-center gap-1 border border-gray-300 rounded focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 overflow-hidden bg-white pr-1 transition-all">
+              <input 
+                className="p-1.5 flex-1 text-sm outline-none w-full" 
+                placeholder="Media URL, Upload, or Paste Image Here" 
+                value={m.url} 
+                onChange={(e) => handleMediaChange(i, 'url', e.target.value)} 
+                onPaste={(e) => handlePaste(e, i)} // Attach the paste handler here
+                disabled={uploadingIndex === i}
+              />
+              
+              {/* Preview Button (Only shows if URL exists) */}
+              {m.url && (
+                <button
+                  onClick={() => setPreviewMedia(m)}
+                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  title="Preview Media"
+                  disabled={uploadingIndex === i}
+                >
+                  <EyeIcon />
+                </button>
+              )}
 
-          <input 
-            className="border border-gray-300 p-1.5 flex-1 rounded text-sm focus:outline-blue-500" 
-            placeholder="Caption (Optional)" 
-            value={m.caption} 
-            onChange={(e) => handleMediaChange(i, 'caption', e.target.value)} 
-          />
-          <button onClick={() => handleDeleteMedia(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
-            <TrashIcon />
-          </button>
-        </div>
-      ))}
-    </div>
+              <input
+                type="file"
+                accept={m.type === 'image' ? 'image/*' : 'video/*'}
+                className="hidden"
+                id={`media-upload-${nodeId}-${i}`}
+                onChange={(e) => handleFileUpload(i, e.target.files[0])}
+                disabled={uploadingIndex === i}
+              />
+              
+              <label
+                htmlFor={`media-upload-${nodeId}-${i}`}
+                className={`cursor-pointer p-1 rounded transition-colors ${uploadingIndex === i ? 'text-gray-400' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'}`}
+                title="Upload File"
+              >
+                {uploadingIndex === i ? <SpinnerIcon /> : <UploadIcon />}
+              </label>
+            </div>
+
+            <input 
+              className="border border-gray-300 p-1.5 flex-1 rounded text-sm focus:outline-blue-500" 
+              placeholder="Caption (Optional)" 
+              value={m.caption} 
+              onChange={(e) => handleMediaChange(i, 'caption', e.target.value)} 
+            />
+            <button onClick={() => handleDeleteMedia(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
+              <TrashIcon />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Render the Modal if a media item is selected */}
+      <MediaModal 
+        mediaItem={previewMedia} 
+        onClose={() => setPreviewMedia(null)} 
+      />
+    </>
   );
 }

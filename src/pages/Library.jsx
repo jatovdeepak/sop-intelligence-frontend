@@ -19,6 +19,8 @@ import SOPFlowchart from "../components/SOPFlowchart";
 import DataExtractor from "../sop-data-extractor/DataExtractor";
 import PDFViewerModal from "../components/PDFViewerModal";
 import BuildRag from "../components/BuildRag"; // <-- NEW IMPORT
+import SOPChatLayout from "../layouts/SOPChatLayout";
+import SOPFlowchartLayout from "../layouts/SOPFlowchartLayout";
 
 export default function Library() {
   const [showCompliance, setShowCompliance] = useState(false);
@@ -426,19 +428,36 @@ export default function Library() {
         </div>
       )}
 
-      {showChat && selectedSop && (
+      {/* {showChat && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <ChatWithSOP sop={selectedSop} onClose={() => setShowChat(false)} />
         </div>
+      )} */}
+
+{showChat && selectedSop && (
+        <SOPChatLayout 
+          sop={selectedSop} 
+          onClose={() => setShowChat(false)}
+          onRefresh={fetchSOPs} // Pass fetchSOPs so the orchestrator can update the data
+        />
       )}
 
-      {showFlowchart && selectedSop && (
+      {/* {showFlowchart && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <SOPFlowchart
             sop={selectedSop}
             onClose={() => setShowFlowchart(false)}
           />
         </div>
+      )} */}
+
+      {/* Replace your old showFlowchart block with this: */}
+      {showFlowchart && selectedSop && (
+        <SOPFlowchartLayout
+          sop={selectedSop}
+          onClose={() => setShowFlowchart(false)}
+          onRefresh={fetchSOPs} // Allows the orchestrator to pull fresh data after extraction
+        />
       )}
 
       {showAddSOP && (

@@ -5,24 +5,78 @@ import DataExtractor from "../sop-data-extractor/DataExtractor";
 import BuildRag from "../components/BuildRag";
 
 export default function SOPChatLayout({ sop, onClose, onRefresh }) {
-  // Check if data is missing/empty
-  const isDataEmpty =
-    !sop?.data ||
-    (Array.isArray(sop?.data) && sop.data.length === 0) ||
-    (typeof sop?.data === "object" && !Array.isArray(sop.data) && Object.keys(sop.data).length === 0 && !sop.data.sections);
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-  const isRagReady = sop?.embeddingStatus === "completed";
+  // 1. Keep a local copy of the SOP so we can update it without closing the modal
+  const [localSop, setLocalSop] = useState(sop);
+
+  // 2. A smarter check to see if the data is TRULY empty
+  const checkIsDataEmpty = (dataToCheck) => {
+    if (!dataToCheck) return true;
+    if (Array.isArray(dataToCheck) && dataToCheck.length === 0) return true;
+    
+    if (typeof dataToCheck === "object" && !Array.isArray(dataToCheck)) {
+      if (Object.keys(dataToCheck).length === 0 && !dataToCheck.sections) return true;
+      
+      if (dataToCheck.sections && Array.isArray(dataToCheck.sections)) {
+        if (dataToCheck.sections.length === 0) return true;
+        if (dataToCheck.sections.length === 1) {
+          const firstSection = dataToCheck.sections[0];
+          if (!firstSection.title && !firstSection.content && (!firstSection.children || firstSection.children.length === 0)) {
+            return true; // Empty default section
+          }
+        }
+      }
+    }
+    return false;
+  };
+
+  const isDataEmpty = checkIsDataEmpty(localSop?.data);
+  const isRagReady = localSop?.embeddingStatus === "completed";
 
   // State to control what is currently visible on screen
-  // If data is missing or RAG is not ready, default to "setup", otherwise jump straight to "chat"
   const [view, setView] = useState(isDataEmpty || !isRagReady ? "setup" : "chat");
 
-  // Keep view updated if SOP prop updates (e.g., after running extractor or RAG)
+  // Keep view updated if localSop updates naturally
   useEffect(() => {
     if (!isDataEmpty && isRagReady && view === "setup") {
       setView("chat");
     }
   }, [isDataEmpty, isRagReady, view]);
+
+  // 3. Function to pull the freshest data from your DB when either Extractor or RAG closes
+  const handleUpdateClose = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/sops/${localSop._id || localSop.sopId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const updatedSop = await res.json();
+        setLocalSop(updatedSop); // Update local state
+        
+        // Decide where to go next based on fresh data
+        const stillEmpty = checkIsDataEmpty(updatedSop.data);
+        const nowRagReady = updatedSop.embeddingStatus === "completed";
+        
+        if (stillEmpty || !nowRagReady) {
+          setView("setup"); // Missing something, stay on dashboard
+        } else {
+          setView("chat"); // All good, launch chat!
+        }
+      } else {
+        setView("setup");
+      }
+    } catch (err) {
+      console.error("Failed to fetch updated SOP:", err);
+      setView("setup");
+    }
+
+    if (onRefresh) onRefresh(); // Quietly update the background Library table
+  };
+
+  // --- RENDER VIEWS ---
 
   // 1. Render Data Extractor
   if (view === "extractor") {
@@ -30,11 +84,8 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="relative w-full h-full max-h-screen rounded-2xl bg-white shadow-2xl overflow-hidden">
           <DataExtractor
-            sop={sop}
-            onClose={() => {
-              setView("setup");
-              if (onRefresh) onRefresh(); // Trigger a refetch in the Library
-            }}
+            sop={localSop}
+            onClose={handleUpdateClose} // Fetch on close
           />
         </div>
       </div>
@@ -46,11 +97,8 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
         <BuildRag
-          sop={sop}
-          onClose={() => {
-            setView("setup");
-            if (onRefresh) onRefresh(); // Trigger a refetch to get updated embeddingStatus
-          }}
+          sop={localSop}
+          onClose={handleUpdateClose} // Fetch on close
         />
       </div>
     );
@@ -58,10 +106,10 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
 
   // 3. Render Chat Modal
   if (view === "chat") {
-    return <ChatWithSOP sop={sop} onClose={onClose} />;
+    return <ChatWithSOP sop={localSop} onClose={onClose} />;
   }
 
-  // 4. Render Setup Dashboard (Fallback when data/rag is missing)
+  // 4. Render Setup Dashboard
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="flex h-[90vh] w-[900px] flex-col rounded-2xl bg-white shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -72,7 +120,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500 text-white font-bold">✨</div>
             <div>
               <h2 className="text-base font-semibold">SOP Preparation</h2>
-              <p className="text-sm text-slate-500">{sop?.sopId ?? "SOP"} · Setup Required</p>
+              <p className="text-sm text-slate-500">{localSop?.sopId ?? "SOP"} · Setup Required</p>
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-orange-100 transition-colors">
@@ -130,11 +178,11 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
                     <span className="text-slate-500">Status:</span>
                     <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wide ${
                       isRagReady ? "bg-emerald-100 text-emerald-700" :
-                      sop?.embeddingStatus === "Pending" ? "bg-amber-100 text-amber-700" :
-                      sop?.embeddingStatus === "Failed" ? "bg-red-100 text-red-700" :
+                      localSop?.embeddingStatus === "Pending" ? "bg-amber-100 text-amber-700" :
+                      localSop?.embeddingStatus === "Failed" ? "bg-red-100 text-red-700" :
                       "bg-slate-100 text-slate-500"
                     }`}>
-                      {sop?.embeddingStatus || "Not Embedded"}
+                      {localSop?.embeddingStatus || "Not Embedded"}
                     </span>
                   </div>
                 </div>
@@ -152,7 +200,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
               </button>
             </div>
 
-            {/* Jump to Chat Button (Appears if user completes steps but stays on screen) */}
+            {/* Jump to Chat Button */}
             {!isDataEmpty && isRagReady && (
               <button 
                 onClick={() => setView("chat")} 

@@ -55,14 +55,12 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
     try {
       const token = localStorage.getItem("token");
       
-      // Assuming your Express backend has an endpoint like this.
-      // Make sure this matches your actual backend route!
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}` 
         },
-        body: formData, // Don't set Content-Type header, let the browser set the multipart boundary
+        body: formData, 
       });
 
       if (!response.ok) {
@@ -71,7 +69,6 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
 
       const data = await response.json();
       
-      // Update this based on the exact JSON structure your backend returns (e.g., data.url, data.fileUrl, data.path)
       const uploadedUrl = data.url || data.fileUrl; 
 
       if (uploadedUrl) {
@@ -85,6 +82,26 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
       alert("Failed to upload media. Please try again.");
     } finally {
       setUploadingIndex(null);
+    }
+  };
+
+  // --- New handler to catch pasted images ---
+  const handlePaste = (e, index) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        // Prevent the default paste behavior (avoids pasting base64 text)
+        e.preventDefault(); 
+        
+        // Extract the image file from the clipboard
+        const file = items[i].getAsFile();
+        
+        // Push it to the existing upload function
+        handleFileUpload(index, file);
+        break; // Stop after finding the first image
+      }
     }
   };
 
@@ -110,9 +127,10 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
           <div className="flex flex-1 items-center gap-1 border border-gray-300 rounded focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 overflow-hidden bg-white pr-1 transition-all">
             <input 
               className="p-1.5 flex-1 text-sm outline-none w-full" 
-              placeholder="Media URL or Upload" 
+              placeholder="Media URL, Upload, or Paste Image Here" 
               value={m.url} 
               onChange={(e) => handleMediaChange(i, 'url', e.target.value)} 
+              onPaste={(e) => handlePaste(e, i)} // Attach the paste handler here
               disabled={uploadingIndex === i}
             />
             

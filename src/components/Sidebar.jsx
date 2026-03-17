@@ -7,7 +7,8 @@ import {
   Settings,
   BotIcon,
   ChevronLeft,
-  Activity // <-- 1. IMPORT THIS ICON
+  Activity,
+  Server
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -16,7 +17,8 @@ const topLinks = [
   { to: "/", label: "Dashboard", icon: LayoutGrid },
   { to: "/library", label: "Library", icon: FileText },
   { to: "/users", label: "Users", icon: Users, requiredRole: "Admin" },
-  { to: "/audits", label: "Audit Logs", icon: Activity, requiredRole: "Admin" }, // <-- ADDED THIS LINE
+  { to: "/audits", label: "Audit Logs", icon: Activity, requiredRole: "Admin" }, 
+  { to: "/system-monitor", label: "System Monitor", icon: Server, requiredRole: "Admin" },
   { to: "/sop-intelligence", label: "SOP Intelligence AI", icon: BotIcon },
 ];
 

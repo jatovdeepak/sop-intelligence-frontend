@@ -9,6 +9,7 @@ import Account from "./pages/Account";
 import Settings from "./pages/Settings";
 import SOPIntelligence from "./pages/SOPIntelligence";
 import Login from "./pages/Login";
+import SystemMonitor from "./pages/SystemMonitor";
 
 // Protect routes
 const ProtectedRoute = ({ children }) => {
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/library" element={<Library />} />
           <Route path="/users" element={<Users />} />
           <Route path="/audits" element={<Audits />} />
+          <Route path="/system-monitor" element={<SystemMonitor />} />
           <Route path="/sop-intelligence" element={<SOPIntelligence />} />
           <Route path="/account" element={<Account />} />
           <Route path="/settings" element={<Settings />} />

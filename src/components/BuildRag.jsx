@@ -22,21 +22,9 @@ export default function BuildRag({ sop, onClose }) {
         const rawId = sop.sopId || sop._id;
         let safeDocumentId = rawId.toString().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
 
-        // 2. Safely extract the sections array from the 'data' object
-        let sectionsArray = [];
-        if (Array.isArray(sop.data)) {
-          sectionsArray = sop.data;
-        } else if (sop.data && Array.isArray(sop.data.sections)) {
-          sectionsArray = sop.data.sections;
-        } else if (sop.data && typeof sop.data === 'object') {
-           sectionsArray = [sop.data];
-        } else if (Array.isArray(sop.sections)) {
-           sectionsArray = sop.sections;
-        }
-
         const payload = {
           document_id: safeDocumentId,
-          sections: sectionsArray, 
+          jsonData: sop.data, 
         };
 
         // --- STEP 1: Embed in ChromaDB ---

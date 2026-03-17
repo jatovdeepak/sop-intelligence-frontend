@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { 
-  Activity, Server, Database, Cpu, 
-  HardDrive, Clock, Wifi, WifiOff 
+  Activity, Layers, Database, Cpu, 
+  Clock, Wifi, WifiOff 
 } from 'lucide-react';
 
 // Utility functions for formatting
@@ -28,14 +28,14 @@ const formatUptime = (seconds) => {
   return parts.join(' ');
 };
 
-export default function BackendService() {
+export default function RagServiceMonitor() {
   const [metrics, setMetrics] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  const RAG_API_URL = import.meta.env.VITE_RAG_API_BASE_URL || 'http://localhost:8000';
 
   useEffect(() => {
-    const socket = io(API_URL, {
+    const socket = io(RAG_API_URL, {
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 2000
@@ -58,21 +58,21 @@ export default function BackendService() {
     });
 
     return () => socket.disconnect();
-  }, [API_URL]);
+  }, [RAG_API_URL]);
 
   if (!metrics && connectionStatus !== 'online') {
     return (
-      <div className="flex items-center justify-center h-64 bg-slate-50 rounded-xl border border-slate-200">
+      <div className="flex items-center justify-center h-48 bg-slate-50 rounded-xl border border-slate-200">
         <div className="flex flex-col items-center gap-3 text-slate-500">
           {connectionStatus === 'connecting' || connectionStatus === 'reconnecting' ? (
-            <Activity className="h-8 w-8 animate-pulse text-blue-500" />
+            <Activity className="h-8 w-8 animate-pulse text-indigo-500" />
           ) : (
              <WifiOff className="h-8 w-8 text-red-500" />
           )}
           <p className="font-medium text-sm">
             {connectionStatus === 'connecting' || connectionStatus === 'reconnecting' 
-              ? 'Connecting to Main API...' 
-              : 'Main API Offline'}
+              ? 'Connecting to RAG Service...' 
+              : 'RAG Service Offline'}
           </p>
         </div>
       </div>
@@ -80,9 +80,6 @@ export default function BackendService() {
   }
 
   const safeMetrics = metrics || {};
-  const osMemPercent = safeMetrics.system ? 
-    ((safeMetrics.system.totalMemory - safeMetrics.system.freeMemory) / safeMetrics.system.totalMemory) * 100 : 0;
-  
   const heapPercent = safeMetrics.memory ? 
     (safeMetrics.memory.heapUsed / safeMetrics.memory.heapTotal) * 100 : 0;
 
@@ -92,8 +89,8 @@ export default function BackendService() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <Server className="h-6 w-6 text-blue-600" />
-            Core API Telemetry
+            <Layers className="h-6 w-6 text-indigo-600" />
+            RAG AI Service
           </h2>
           <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
             <Clock className="h-4 w-4" /> 
@@ -101,7 +98,7 @@ export default function BackendService() {
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border bg-white
             ${connectionStatus === 'online' ? 'text-emerald-700 border-emerald-200' : 
               connectionStatus === 'offline' ? 'text-red-700 border-red-200' : 
@@ -116,17 +113,17 @@ export default function BackendService() {
               : 'text-red-700 border-red-200'}`}
           >
             <Database className="h-4 w-4" />
-            MongoDB: {connectionStatus === 'online' ? (safeMetrics?.db?.status?.toUpperCase() || 'UNKNOWN') : 'OFFLINE'}
+            ChromaDB: {connectionStatus === 'online' ? (safeMetrics?.db?.status?.toUpperCase() || 'UNKNOWN') : 'OFFLINE'}
           </span>
         </div>
       </div>
 
       {/* METRICS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* CPU USAGE */}
         <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
           <div className="flex items-center gap-3 mb-4 text-slate-700">
-            <div className="p-2.5 bg-blue-100 text-blue-600 rounded-lg">
+            <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-lg">
               <Cpu className="h-5 w-5" />
             </div>
             <h3 className="font-semibold">CPU Usage</h3>
@@ -136,53 +133,25 @@ export default function BackendService() {
               <span className="text-3xl font-bold text-slate-800">
                 {safeMetrics?.cpu?.usagePercent || 0}%
               </span>
-              <span className="text-sm text-slate-500 font-medium pb-1">Load</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-2.5">
               <div 
                 className={`h-2.5 rounded-full transition-all duration-500 ease-out
                   ${(safeMetrics?.cpu?.usagePercent || 0) > 80 ? 'bg-red-500' : 
-                    (safeMetrics?.cpu?.usagePercent || 0) > 60 ? 'bg-amber-500' : 'bg-blue-500'}`}
+                    (safeMetrics?.cpu?.usagePercent || 0) > 60 ? 'bg-amber-500' : 'bg-indigo-500'}`}
                 style={{ width: `${safeMetrics?.cpu?.usagePercent || 0}%` }}
               ></div>
             </div>
           </div>
         </div>
 
-        {/* OS MEMORY */}
+        {/* PROCESS MEMORY (RSS) */}
         <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
           <div className="flex items-center gap-3 mb-4 text-slate-700">
             <div className="p-2.5 bg-purple-100 text-purple-600 rounded-lg">
-              <HardDrive className="h-5 w-5" />
-            </div>
-            <h3 className="font-semibold">System Memory</h3>
-          </div>
-          <div>
-            <div className="flex justify-between items-end mb-2">
-              <div className="flex flex-col">
-                <span className="text-2xl font-bold text-slate-800">
-                  {formatBytes(safeMetrics?.system?.totalMemory - safeMetrics?.system?.freeMemory)}
-                </span>
-                <span className="text-xs text-slate-500 font-medium">Used of {formatBytes(safeMetrics?.system?.totalMemory)}</span>
-              </div>
-              <span className="text-sm font-bold text-purple-600 pb-1">{osMemPercent.toFixed(1)}%</span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2.5">
-              <div 
-                className="h-2.5 rounded-full bg-purple-500 transition-all duration-500 ease-out"
-                style={{ width: `${osMemPercent}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        {/* NODE HEAP */}
-        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
-          <div className="flex items-center gap-3 mb-4 text-slate-700">
-            <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-lg">
               <Activity className="h-5 w-5" />
             </div>
-            <h3 className="font-semibold">Node Heap Used</h3>
+            <h3 className="font-semibold">Process Memory</h3>
           </div>
           <div>
             <div className="flex justify-between items-end mb-2">
@@ -190,13 +159,12 @@ export default function BackendService() {
                 <span className="text-2xl font-bold text-slate-800">
                   {formatBytes(safeMetrics?.memory?.heapUsed)}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">Allocated: {formatBytes(safeMetrics?.memory?.heapTotal)}</span>
               </div>
-              <span className="text-sm font-bold text-emerald-600 pb-1">{heapPercent.toFixed(1)}%</span>
+              <span className="text-sm font-bold text-purple-600 pb-1">{heapPercent.toFixed(1)}%</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-2.5">
               <div 
-                className="h-2.5 rounded-full bg-emerald-500 transition-all duration-500 ease-out"
+                className="h-2.5 rounded-full bg-purple-500 transition-all duration-500 ease-out"
                 style={{ width: `${heapPercent}%` }}
               ></div>
             </div>
@@ -206,18 +174,14 @@ export default function BackendService() {
 
       {/* FOOTER METRICS */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-wrap gap-6 items-center text-sm">
-        <span className="text-slate-500 font-medium">System Load Avg (1m, 5m, 15m):</span>
-        {safeMetrics?.system?.loadAvg ? (
-          <div className="flex gap-4 font-mono font-medium text-slate-700">
-            <span>{safeMetrics.system.loadAvg[0].toFixed(2)}</span>
-            <span>{safeMetrics.system.loadAvg[1].toFixed(2)}</span>
-            <span>{safeMetrics.system.loadAvg[2].toFixed(2)}</span>
-          </div>
+        <span className="text-slate-500 font-medium">Model Status:</span>
+        {safeMetrics?.modelLoaded ? (
+           <span className="text-emerald-600 font-semibold">Loaded & Ready</span>
         ) : (
-          <span className="text-slate-400">Waiting for data...</span>
+          <span className="text-slate-400">Awaiting query...</span>
         )}
         <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
-          <span className="animate-pulse h-2 w-2 bg-blue-500 rounded-full"></span>
+          <span className="animate-pulse h-2 w-2 bg-indigo-500 rounded-full"></span>
           Live updating every 5s
         </div>
       </div>

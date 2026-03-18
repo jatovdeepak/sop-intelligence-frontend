@@ -28,6 +28,24 @@ const ImportIcon = () => (
   </svg>
 );
 
+const ChevronDownIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+  </svg>
+);
+
+const ChevronRightIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+);
+
 const COLOR_OPTIONS = ['blue', 'purple', 'amber', 'emerald', 'rose', 'cyan', 'indigo', 'orange', 'gray'];
 
 // --- Helpers to update deeply nested nodes immutably ---
@@ -52,8 +70,66 @@ const deleteTree = (nodes, targetId) => {
     }));
 };
 
+// Helper to insert a sibling node at the same level
+// Helper to insert a sibling node at the same level
+const insertAfter = (nodes, targetId) => {
+  let result = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.id === targetId) {
+      result.push(node); // keep original
+      
+      // Try to generate a smart ID based on the node we are inserting after
+      const parts = node.id.split('.');
+      let newId = '';
+      const lastPart = parseInt(parts[parts.length - 1], 10);
+
+      if (!isNaN(lastPart)) {
+        // FIX: Check if it's a root-level format like '5.0'
+        if (lastPart === 0 && parts.length >= 2) {
+          const prevPart = parseInt(parts[parts.length - 2], 10);
+          if (!isNaN(prevPart)) {
+            // Increment the major version (e.g., the 5 in 5.0)
+            parts[parts.length - 2] = (prevPart + 1).toString();
+            newId = parts.join('.'); // Keeps the .0 at the end
+          } else {
+            parts[parts.length - 1] = (lastPart + 1).toString();
+            newId = parts.join('.');
+          }
+        } else {
+          // Standard sibling increment (e.g., 5.1 -> 5.2)
+          parts[parts.length - 1] = (lastPart + 1).toString();
+          newId = parts.join('.');
+        }
+      } else {
+        newId = `${node.id}-new`;
+      }
+
+      result.push({
+        id: newId,
+        title: '',
+        content: '',
+        pageNumbers: '',
+        metadata: [],
+        flowcharts: [],
+        tables: [],
+        media: [],
+        children: [],
+      });
+    } else {
+      result.push({
+        ...node,
+        children: node.children ? insertAfter(node.children, targetId) : []
+      });
+    }
+  }
+  return result;
+};
+
 // --- Recursive Form Component (Internal) ---
-const RecursiveNode = ({ node, onUpdate, onDelete }) => {
+const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   const handleChange = (field, value) => {
     onUpdate(node.id, (n) => ({ ...n, [field]: value }));
   };
@@ -71,6 +147,7 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
       children: [],
     };
     onUpdate(node.id, (n) => ({ ...n, children: [...n.children, newChild] }));
+    setIsCollapsed(false);
   };
 
   const handleAddMetadata = () => {
@@ -117,101 +194,141 @@ const RecursiveNode = ({ node, onUpdate, onDelete }) => {
   };
 
   return (
-    <div className="border border-gray-300 rounded p-2 mb-2 ml-3 bg-white shadow-sm relative group text-xs">
-      <div className="flex gap-1 mb-1.5 items-center">
-        <input
-          className="border border-gray-300 p-1 w-16 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
-          placeholder="ID (1.0)"
-          value={node.id}
-          onChange={(e) => handleChange('id', e.target.value)}
-        />
-        <input
-          className="border border-gray-300 p-1 w-20 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 text-xs"
-          placeholder="Pg (3-5)"
-          value={node.pageNumbers || ''}
-          onChange={(e) => handleChange('pageNumbers', e.target.value)}
-          title="Page Numbers"
-        />
-        <input
-          className="border border-gray-300 p-1 flex-1 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
-          placeholder="Section Title"
-          value={node.title}
-          onChange={(e) => handleChange('title', e.target.value)}
-        />
-        <button
-          onClick={() => onDelete(node.id)}
-          className="text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors p-1 rounded"
-          title="Delete Entire Section"
-        >
-          <TrashIcon />
-        </button>
+    <div className="border border-gray-300 rounded p-0 mb-4 ml-3 bg-white shadow-sm relative group text-xs flex flex-col">
+      
+      {/* STICKY HEADER & ACTION BAR */}
+      <div className={`top-0 z-10 bg-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] transition-all ${isCollapsed ? 'rounded' : 'rounded-t border-b border-gray-200'}`}>
+        
+        {/* Node Title Header (Always visible) */}
+        <div className={`flex gap-1 p-2 items-center bg-gray-50 ${isCollapsed ? 'rounded' : 'rounded-t'}`}>
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)} 
+            className="text-gray-500 hover:text-gray-700 hover:bg-gray-200 p-0.5 rounded transition-colors"
+            title={isCollapsed ? "Expand Section" : "Collapse Section"}
+          >
+            {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
+          </button>
+          <input
+            className="border border-gray-300 p-1 w-16 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
+            placeholder="ID (1.0)"
+            value={node.id}
+            onChange={(e) => handleChange('id', e.target.value)}
+          />
+          <input
+            className="border border-gray-300 p-1 w-20 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 text-xs"
+            placeholder="Pg (3-5)"
+            value={node.pageNumbers || ''}
+            onChange={(e) => handleChange('pageNumbers', e.target.value)}
+            title="Page Numbers"
+          />
+          <input
+            className="border border-gray-300 p-1 flex-1 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
+            placeholder="Section Title"
+            value={node.title}
+            onChange={(e) => handleChange('title', e.target.value)}
+          />
+          <button
+            onClick={() => onDelete(node.id)}
+            className="text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors p-1 rounded"
+            title="Delete Entire Section"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+
+        {/* Action Buttons Footer (Moved to TOP, visible if expanded) */}
+        {!isCollapsed && (
+          <div className="flex flex-wrap gap-1 p-2 bg-white">
+            <button onClick={handleAddChild} className="bg-blue-500 text-white px-2 py-1 rounded text-[10px] hover:bg-blue-600 shadow-sm transition-colors">
+              + Add Sub-section
+            </button>
+            <button onClick={() => onAddSibling(node.id)} className="bg-slate-600 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700 shadow-sm transition-colors">
+              + Add Sibling Section
+            </button>
+            <button onClick={handleAddMetadata} className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors">
+              + Add Metadata
+            </button>
+            <button onClick={handleAddFlowchart} className="bg-purple-500 text-white px-2 py-1 rounded text-[10px] hover:bg-purple-600 shadow-sm transition-colors">
+              + Add Flowchart
+            </button>
+            <button onClick={handleAddTable} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] hover:bg-green-700 shadow-sm transition-colors">
+              + Add Table
+            </button>
+            <button onClick={handleAddMedia} className="bg-teal-500 text-white px-2 py-1 rounded text-[10px] hover:bg-teal-600 shadow-sm transition-colors">
+              + Add Media
+            </button>
+          </div>
+        )}
       </div>
 
-      {(node.metadata || []).length > 0 && (
-        <div className="mb-1.5 space-y-1 bg-gray-50 p-1.5 rounded border border-gray-200">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Section Metadata</label>
-          {(node.metadata || []).map((meta, i) => (
-            <div key={i} className="flex gap-1 items-center">
-              <input 
-                className="border border-gray-300 p-1 w-1/3 rounded text-xs focus:outline-blue-500" 
-                placeholder="Key (e.g., Sub-system Code)" 
-                value={meta.key} 
-                onChange={(e) => handleMetadataChange(i, 'key', e.target.value)} 
-              />
-              <input 
-                className="border border-gray-300 p-1 flex-1 rounded text-xs focus:outline-blue-500" 
-                placeholder="Value" 
-                value={meta.value} 
-                onChange={(e) => handleMetadataChange(i, 'value', e.target.value)} 
-              />
-              <button onClick={() => handleDeleteMetadata(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
-                <TrashIcon />
-              </button>
+      {/* Node Content (Collapsible) */}
+      {!isCollapsed && (
+        <div className="flex flex-col relative h-full">
+          <div className="p-2 pb-0">
+            {(node.metadata || []).length > 0 && (
+              <div className="mb-1.5 space-y-1 bg-gray-50 p-1.5 rounded border border-gray-200">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Section Metadata</label>
+                {(node.metadata || []).map((meta, i) => (
+                  <div key={i} className="flex gap-1 items-center">
+                    <input 
+                      className="border border-gray-300 p-1 w-1/3 rounded text-xs focus:outline-blue-500" 
+                      placeholder="Key (e.g., Sub-system Code)" 
+                      value={meta.key} 
+                      onChange={(e) => handleMetadataChange(i, 'key', e.target.value)} 
+                    />
+                    <input 
+                      className="border border-gray-300 p-1 flex-1 rounded text-xs focus:outline-blue-500" 
+                      placeholder="Value" 
+                      value={meta.value} 
+                      onChange={(e) => handleMetadataChange(i, 'value', e.target.value)} 
+                    />
+                    <button onClick={() => handleDeleteMetadata(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <MediaEditor nodeId={node.id} media={node.media || []} onUpdate={onUpdate} />
+
+            <textarea
+              className="border border-gray-300 p-1.5 w-full rounded mb-1.5 h-16 text-xs focus:outline-blue-500 focus:ring-1 focus:ring-blue-500"
+              placeholder="Text Content..."
+              value={node.content}
+              onChange={(e) => handleChange('content', e.target.value)}
+            />
+
+            <FlowchartEditor nodeId={node.id} flowcharts={node.flowcharts || []} onUpdate={onUpdate} />
+            <TableEditor nodeId={node.id} tables={node.tables || []} onUpdate={onUpdate} />
+          </div>
+
+          {/* Children nodes container */}
+          {node.children && node.children.length > 0 && (
+            <div className="mt-2 border-l-2 border-blue-200 pl-2 mx-2 mb-2">
+              {node.children.map((child) => (
+                <RecursiveNode 
+                  key={child.id} 
+                  node={child} 
+                  onUpdate={onUpdate} 
+                  onDelete={onDelete} 
+                  onAddSibling={onAddSibling}
+                />
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      {/* Replaced Inline Media Block with the newly imported Component */}
-      <MediaEditor nodeId={node.id} media={node.media || []} onUpdate={onUpdate} />
-
-      <textarea
-        className="border border-gray-300 p-1.5 w-full rounded mb-1.5 h-16 text-xs focus:outline-blue-500 focus:ring-1 focus:ring-blue-500"
-        placeholder="Text Content..."
-        value={node.content}
-        onChange={(e) => handleChange('content', e.target.value)}
-      />
-
-      <FlowchartEditor nodeId={node.id} flowcharts={node.flowcharts || []} onUpdate={onUpdate} />
-      <TableEditor nodeId={node.id} tables={node.tables || []} onUpdate={onUpdate} />
-
-      <div className="flex flex-wrap gap-1 pt-1.5 border-t border-gray-100">
-        <button onClick={handleAddChild} className="bg-blue-500 text-white px-2 py-1 rounded text-[10px] hover:bg-blue-600 shadow-sm transition-colors">
-          + Add Sub-section
+      {/* STICKY BOTTOM + BUTTON (Add Sibling) */}
+      <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 z-10 opacity-70 hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => onAddSibling(node.id)}
+          className="bg-white border border-gray-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 rounded-full flex items-center justify-center shadow-sm transition-all h-6 w-6"
+          title="Add Section Below (Same Level)"
+        >
+          <PlusIcon />
         </button>
-        <button onClick={handleAddMetadata} className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors">
-          + Add Metadata
-        </button>
-        <button onClick={handleAddFlowchart} className="bg-purple-500 text-white px-2 py-1 rounded text-[10px] hover:bg-purple-600 shadow-sm transition-colors">
-          + Add Flowchart
-        </button>
-        <button onClick={handleAddTable} className="bg-green-600 text-white px-2 py-1 rounded text-[10px] hover:bg-green-700 shadow-sm transition-colors">
-          + Add Table
-        </button>
-        <button onClick={handleAddMedia} className="bg-teal-500 text-white px-2 py-1 rounded text-[10px] hover:bg-teal-600 shadow-sm transition-colors">
-          + Add Media
-        </button>
-      </div>
-
-      <div className="mt-2 border-l-2 border-blue-200 pl-2">
-        {node.children.map((child) => (
-          <RecursiveNode 
-            key={child.id} 
-            node={child} 
-            onUpdate={onUpdate} 
-            onDelete={onDelete} 
-          />
-        ))}
       </div>
     </div>
   );
@@ -235,13 +352,11 @@ export default function DataExtractor({ sop, onClose }) {
       if (sop?.pdfPathBase64) {
         setIsPdfLoading(true);
         try {
-          // Ensure it's formatted as a proper data URI
           const prefix = 'data:application/pdf;base64,';
           const dataUri = sop.pdfPathBase64.startsWith('data:') 
             ? sop.pdfPathBase64 
             : prefix + sop.pdfPathBase64;
 
-          // Fetch turns the base64 URI into a Blob asynchronously off the main thread
           const response = await fetch(dataUri);
           const blob = await response.blob();
           
@@ -261,7 +376,6 @@ export default function DataExtractor({ sop, onClose }) {
 
     loadPdfAsync();
 
-    // Cleanup function
     return () => {
       isMounted = false;
       if (objectUrl) {
@@ -270,7 +384,6 @@ export default function DataExtractor({ sop, onClose }) {
     };
   }, [sop]);
   
-  // Initialize purely from sop.data or use the default structure
   const [documentData, setDocumentData] = useState(() => {
     if (sop?.data?.sections) {
       return sop.data;
@@ -291,13 +404,11 @@ export default function DataExtractor({ sop, onClose }) {
     }
   }, []);
 
-  // Auto-Save Effect (Debounced 1.5 seconds directly to the backend)
   useEffect(() => {
-    // Prevent auto-save if this is a purely new/unsaved SOP without an ID
     if (!sop?._id) return;
 
     const timer = setTimeout(async () => {
-      setSaveStatus('saving'); // 1. Tell the UI we are trying to save
+      setSaveStatus('saving'); 
       
       try {
         const token = localStorage.getItem("token");
@@ -309,19 +420,19 @@ export default function DataExtractor({ sop, onClose }) {
           },
           body: JSON.stringify({ 
             data: documentData,
-            lastExtractedTime: new Date().toISOString() // <-- Send current timestamp on every auto-save
+            lastExtractedTime: new Date().toISOString()
           }) 
         });
 
         if (response.ok) {
           setLastSaved(new Date());
-          setSaveStatus('saved'); // 2. Success!
+          setSaveStatus('saved'); 
         } else {
-          setSaveStatus('error'); // 3. Server responded, but it was an error (e.g., 500)
+          setSaveStatus('error'); 
         }
       } catch (err) {
         console.error("Auto-save failed:", err);
-        setSaveStatus('error');   // 4. Network request completely failed
+        setSaveStatus('error'); 
       }
     }, 1500);
     
@@ -423,6 +534,13 @@ export default function DataExtractor({ sop, onClose }) {
     }));
   };
 
+  const handleAddSibling = (id) => {
+    setDocumentData((prev) => ({
+      ...prev,
+      sections: insertAfter(prev.sections, id)
+    }));
+  };
+
   const addRootSection = () => {
     setDocumentData((prev) => ({
       ...prev,
@@ -481,7 +599,6 @@ export default function DataExtractor({ sop, onClose }) {
           <h2 className="text-base font-bold">Data Extraction</h2>
           
           <div className="flex items-center gap-1">
-            {/* NEW STATUS INDICATORS START HERE */}
             {saveStatus === 'saving' && (
               <span className="text-[10px] text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded animate-pulse mr-1">
                 Saving...
@@ -500,7 +617,6 @@ export default function DataExtractor({ sop, onClose }) {
                 Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
-            {/* NEW STATUS INDICATORS END HERE */}
             
             <button 
               onClick={() => setShowJson(!showJson)} 
@@ -547,7 +663,7 @@ export default function DataExtractor({ sop, onClose }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-20">
+        <div className="flex-1 overflow-y-auto pb-20 relative">
           {showJson ? (
             <div className="bg-gray-900 text-green-400 p-3 rounded shadow-inner overflow-auto h-full font-mono text-xs whitespace-pre-wrap">
               {JSON.stringify(documentData, null, 2)}
@@ -637,11 +753,13 @@ export default function DataExtractor({ sop, onClose }) {
               </div>
 
               {/* Sections Header */}
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-bold text-gray-700">SOP Sections</h3>
-                <button onClick={addRootSection} className="bg-gray-800 text-white px-2 py-1 rounded text-[10px] hover:bg-gray-700 transition-colors shadow-sm">
-                  + Add Root Section
-                </button>
+              <div className="sticky top-0 z-20 mb-3 pt-2 -mt-2 bg-gray-200">
+                <div className="flex justify-between items-center bg-white p-2 border border-gray-300 rounded shadow-sm">
+                  <h3 className="text-sm font-bold text-gray-700">SOP Sections</h3>
+                  <button onClick={addRootSection} className="bg-gray-800 text-white px-2 py-1 rounded text-[10px] hover:bg-gray-700 transition-colors shadow-sm">
+                    + Add Root Section
+                  </button>
+                </div>
               </div>
 
               {/* Sections Form Tree */}
@@ -651,6 +769,7 @@ export default function DataExtractor({ sop, onClose }) {
                   node={rootNode} 
                   onUpdate={handleNodeUpdate} 
                   onDelete={handleNodeDelete} 
+                  onAddSibling={handleAddSibling}
                 />
               ))}
             </>

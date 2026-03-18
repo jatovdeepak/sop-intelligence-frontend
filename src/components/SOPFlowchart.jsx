@@ -74,7 +74,20 @@ const DEFAULT_COLOR = { bg: 'bg-slate-50', text: 'text-slate-600', border: 'bord
 // ============================================================================
 
 const NODE_WIDTH = 320; 
-const NODE_HEIGHT = 280; 
+
+// Helper to determine dynamic node height based on content
+const getNodeHeight = (node) => {
+  if (node.type === 'mainNode') return 180;
+  if (node.type === 'refNode') return 140;
+  
+  if (node.type === 'stepNode') {
+    const hasMedia = node.data?.media && node.data.media.length > 0;
+    // Taller height if media is present, shorter if it's just text
+    return hasMedia ? 440 : 200; 
+  }
+  
+  return 220; // Fallback
+};
 
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
@@ -89,7 +102,10 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
   nodes.forEach((node) => {
     if (!node.hidden) {
-      dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+      dagreGraph.setNode(node.id, { 
+        width: NODE_WIDTH, 
+        height: getNodeHeight(node) 
+      });
     }
   });
 
@@ -103,16 +119,45 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
   dagre.layout(dagreGraph);
 
+  // --- NEW: Group nodes by rank to top-align them ---
+  const rankMap = {};
+  
+  nodes.forEach((node) => {
+    if (!node.hidden) {
+      const nodeWithPosition = dagreGraph.node(node.id);
+      const nodeHeight = getNodeHeight(node);
+      
+      // Use rounded position to group items in the exact same rank layer
+      const rankKey = Math.round(isHorizontal ? nodeWithPosition.x : nodeWithPosition.y);
+      
+      if (!rankMap[rankKey]) {
+        rankMap[rankKey] = { maxHalfDim: 0 };
+      }
+      
+      const halfDim = isHorizontal ? (NODE_WIDTH / 2) : (nodeHeight / 2);
+      if (halfDim > rankMap[rankKey].maxHalfDim) {
+        rankMap[rankKey].maxHalfDim = halfDim;
+      }
+    }
+  });
+
   const newNodes = nodes.map((node) => {
     if (node.hidden) return node; 
     const nodeWithPosition = dagreGraph.node(node.id);
+    const nodeHeight = getNodeHeight(node);
+
+    const rankKey = Math.round(isHorizontal ? nodeWithPosition.x : nodeWithPosition.y);
+    const maxHalfDim = rankMap[rankKey].maxHalfDim;
+
     return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,     
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,  
       position: {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
-        y: nodeWithPosition.y - NODE_HEIGHT / 2,
+        // For LR, align lefts using max width dim. For TB, normal horizontal center.
+        x: isHorizontal ? nodeWithPosition.x - maxHalfDim : nodeWithPosition.x - NODE_WIDTH / 2,
+        // For TB, align tops using max height dim. For LR, normal vertical center.
+        y: isHorizontal ? nodeWithPosition.y - nodeHeight / 2 : nodeWithPosition.y - maxHalfDim,
       },
     };
   });
@@ -254,8 +299,8 @@ function generateFlowData(jsonData, currentSop, filters = []) {
     data: {
       label: rootTitle,
       sublabel: `SOP: ${rootId}`,
-      isExpanded: false, 
-      visibleLimit: 3,
+      isExpanded: false, // FIXED: Start with the root expanded so user sees level 1 right away
+      visibleLimit: 99, // Show all top level items
       hasChildren: jsonData && jsonData.length > 0,
       details: {
         title: rootTitle,
@@ -858,12 +903,31 @@ function FlowchartInstance({ sop, openMediaModal }) {
     });
   }, [getEdges, setNodes, fitView, activeLens]);
 
+  // FIXED: toggleNode now cleans up children's memory state when collapsed
   const toggleNode = useCallback((id) => {
     const currentEdges = getEdges();
+    
     setNodes(nds => {
+      const targetNode = nds.find(n => n.id === id);
+      const isCurrentlyExpanded = targetNode ? targetNode.data.isExpanded : false;
+      const isExpanding = !isCurrentlyExpanded;
+
+      // Find all descendants so we can reset them when collapsing
+      const descendants = new Set();
+      if (!isExpanding) {
+        let queue = [id];
+        while (queue.length > 0) {
+          const curr = queue.shift();
+          const children = currentEdges.filter(e => e.source === curr).map(e => e.target);
+          children.forEach(c => {
+            descendants.add(c);
+            queue.push(c);
+          });
+        }
+      }
+
       const nextNodes = nds.map(n => {
         if (n.id === id) {
-          const isExpanding = !n.data.isExpanded;
           return {
             ...n,
             data: { 
@@ -873,20 +937,32 @@ function FlowchartInstance({ sop, openMediaModal }) {
             }
           };
         }
+        
+        // Auto-collapse descendant nodes so they don't unexpectedly pop open later
+        if (!isExpanding && descendants.has(n.id)) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              isExpanded: false,
+              visibleLimit: 3
+            }
+          };
+        }
+        
         return n;
       });
+      
       const updated = applyVisibility(nextNodes, currentEdges, activeLens);
       const { nodes: layoutedNodes } = getLayoutedElements(updated, currentEdges, layoutDirection);
       
-      const targetNode = layoutedNodes.find(n => n.id === id);
-      if (targetNode) {
+      const newlyLayoutedTarget = layoutedNodes.find(n => n.id === id);
+      if (newlyLayoutedTarget) {
         setTimeout(() => {
-          const isExpanded = targetNode.data.isExpanded;
-          
-          let focusX = targetNode.position.x + 150; 
-          let focusY = targetNode.position.y + 90;
+          let focusX = newlyLayoutedTarget.position.x + 150; 
+          let focusY = newlyLayoutedTarget.position.y + 90;
 
-          if (isExpanded) {
+          if (isExpanding) {
             if (layoutDirection === 'TB') {
               focusY += 160; 
             } else {
@@ -895,7 +971,7 @@ function FlowchartInstance({ sop, openMediaModal }) {
           }
 
           setCenter(focusX, focusY, { 
-            zoom: isExpanded ? 0.75 : 1,
+            zoom: isExpanding ? 0.75 : 1,
             duration: 800 
           });
         }, 50);
@@ -984,7 +1060,8 @@ function FlowchartInstance({ sop, openMediaModal }) {
     setNodes(nds => {
       const nextNodes = nds.map(n => ({
         ...n,
-        data: { ...n.data, isExpanded: false }
+        // Keep root open, collapse everything else
+        data: { ...n.data, isExpanded: n.id === 'root' ? true : false }
       }));
       const updated = applyVisibility(nextNodes, currentEdges, activeLens);
       const { nodes: layouted } = getLayoutedElements(updated, currentEdges, layoutDirection);

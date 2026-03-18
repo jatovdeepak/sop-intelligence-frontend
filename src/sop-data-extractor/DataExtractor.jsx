@@ -46,58 +46,75 @@ const PlusIcon = () => (
   </svg>
 );
 
+const GripIcon = () => (
+  <svg className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="9" cy="6" r="1.5"/>
+    <circle cx="15" cy="6" r="1.5"/>
+    <circle cx="9" cy="12" r="1.5"/>
+    <circle cx="15" cy="12" r="1.5"/>
+    <circle cx="9" cy="18" r="1.5"/>
+    <circle cx="15" cy="18" r="1.5"/>
+  </svg>
+);
+
 const COLOR_OPTIONS = ['blue', 'purple', 'amber', 'emerald', 'rose', 'cyan', 'indigo', 'orange', 'gray'];
 
-// --- Helpers to update deeply nested nodes immutably ---
-const updateTree = (nodes, targetId, updater) => {
+// --- UID Generator for stable React mapping ---
+const generateUid = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+
+// Ensures all incoming data has stable internal IDs
+const ensureUids = (nodes) => {
+  return nodes.map(node => ({
+    ...node,
+    uid: node.uid || generateUid(),
+    children: node.children ? ensureUids(node.children) : []
+  }));
+};
+
+// --- Helpers to update deeply nested nodes immutably using `uid` ---
+const updateTree = (nodes, targetUid, updater) => {
   return nodes.map((node) => {
-    if (node.id === targetId) {
+    if (node.uid === targetUid) {
       return updater(node);
     }
     if (node.children && node.children.length > 0) {
-      return { ...node, children: updateTree(node.children, targetId, updater) };
+      return { ...node, children: updateTree(node.children, targetUid, updater) };
     }
     return node;
   });
 };
 
-const deleteTree = (nodes, targetId) => {
+const deleteTree = (nodes, targetUid) => {
   return nodes
-    .filter((node) => node.id !== targetId)
+    .filter((node) => node.uid !== targetUid)
     .map((node) => ({
       ...node,
-      children: node.children ? deleteTree(node.children, targetId) : []
+      children: node.children ? deleteTree(node.children, targetUid) : []
     }));
 };
 
-// Helper to insert a sibling node at the same level
-// Helper to insert a sibling node at the same level
-const insertAfter = (nodes, targetId) => {
+const insertAfter = (nodes, targetUid) => {
   let result = [];
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-    if (node.id === targetId) {
-      result.push(node); // keep original
+    if (node.uid === targetUid) {
+      result.push(node); 
       
-      // Try to generate a smart ID based on the node we are inserting after
       const parts = node.id.split('.');
       let newId = '';
       const lastPart = parseInt(parts[parts.length - 1], 10);
 
       if (!isNaN(lastPart)) {
-        // FIX: Check if it's a root-level format like '5.0'
         if (lastPart === 0 && parts.length >= 2) {
           const prevPart = parseInt(parts[parts.length - 2], 10);
           if (!isNaN(prevPart)) {
-            // Increment the major version (e.g., the 5 in 5.0)
             parts[parts.length - 2] = (prevPart + 1).toString();
-            newId = parts.join('.'); // Keeps the .0 at the end
+            newId = parts.join('.');
           } else {
             parts[parts.length - 1] = (lastPart + 1).toString();
             newId = parts.join('.');
           }
         } else {
-          // Standard sibling increment (e.g., 5.1 -> 5.2)
           parts[parts.length - 1] = (lastPart + 1).toString();
           newId = parts.join('.');
         }
@@ -106,6 +123,7 @@ const insertAfter = (nodes, targetId) => {
       }
 
       result.push({
+        uid: generateUid(),
         id: newId,
         title: '',
         content: '',
@@ -119,7 +137,61 @@ const insertAfter = (nodes, targetId) => {
     } else {
       result.push({
         ...node,
-        children: node.children ? insertAfter(node.children, targetId) : []
+        children: node.children ? insertAfter(node.children, targetUid) : []
+      });
+    }
+  }
+  return result;
+};
+
+// --- Drag & Drop Tree Helpers using `uid` ---
+const findNode = (nodes, uid) => {
+  for (const node of nodes) {
+    if (node.uid === uid) return node;
+    if (node.children) {
+      const found = findNode(node.children, uid);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+const isDescendant = (nodes, parentUid, childUid) => {
+  const parent = findNode(nodes, parentUid);
+  if (!parent) return false;
+  const checkChildren = (children) => {
+    for (const child of children) {
+      if (child.uid === childUid) return true;
+      if (child.children && checkChildren(child.children)) return true;
+    }
+    return false;
+  };
+  return checkChildren(parent.children || []);
+};
+
+const removeNode = (nodes, uid) => {
+  return nodes.filter(node => node.uid !== uid).map(node => ({
+    ...node,
+    children: node.children ? removeNode(node.children, uid) : []
+  }));
+};
+
+const insertNode = (nodes, targetUid, newNode, position) => {
+  let result = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.uid === targetUid) {
+      if (position === 'before') {
+        result.push(newNode);
+        result.push(node);
+      } else {
+        result.push(node);
+        result.push(newNode);
+      }
+    } else {
+      result.push({
+        ...node,
+        children: node.children ? insertNode(node.children, targetUid, newNode, position) : []
       });
     }
   }
@@ -127,15 +199,18 @@ const insertAfter = (nodes, targetId) => {
 };
 
 // --- Recursive Form Component (Internal) ---
-const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
+const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling, onMoveNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDraggable, setIsDraggable] = useState(false);
+  const [dragOverPos, setDragOverPos] = useState(null); 
 
   const handleChange = (field, value) => {
-    onUpdate(node.id, (n) => ({ ...n, [field]: value }));
+    onUpdate(node.uid, (n) => ({ ...n, [field]: value }));
   };
 
   const handleAddChild = () => {
     const newChild = {
+      uid: generateUid(),
       id: `${node.id}.${node.children.length + 1}`,
       title: '',
       content: '',
@@ -146,19 +221,19 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
       media: [],
       children: [],
     };
-    onUpdate(node.id, (n) => ({ ...n, children: [...n.children, newChild] }));
+    onUpdate(node.uid, (n) => ({ ...n, children: [...n.children, newChild] }));
     setIsCollapsed(false);
   };
 
   const handleAddMetadata = () => {
-    onUpdate(node.id, (n) => ({
+    onUpdate(node.uid, (n) => ({
       ...n,
       metadata: [...(n.metadata || []), { key: '', value: '' }]
     }));
   };
 
   const handleMetadataChange = (index, field, value) => {
-    onUpdate(node.id, (n) => {
+    onUpdate(node.uid, (n) => {
       const newMeta = [...(n.metadata || [])];
       newMeta[index] = { ...newMeta[index], [field]: value };
       return { ...n, metadata: newMeta };
@@ -166,41 +241,96 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
   };
 
   const handleDeleteMetadata = (index) => {
-    onUpdate(node.id, (n) => ({
+    onUpdate(node.uid, (n) => ({
       ...n,
       metadata: (n.metadata || []).filter((_, i) => i !== index)
     }));
   };
 
   const handleAddFlowchart = () => {
-    onUpdate(node.id, (n) => ({
+    onUpdate(node.uid, (n) => ({
       ...n,
       flowcharts: [...(n.flowcharts || []), { nodes: [], edges: [] }]
     }));
   };
 
   const handleAddTable = () => {
-    onUpdate(node.id, (n) => ({
+    onUpdate(node.uid, (n) => ({
       ...n,
       tables: [...(n.tables || []), [['', ''], ['', '']]] 
     }));
   };
 
   const handleAddMedia = () => {
-    onUpdate(node.id, (n) => ({
+    onUpdate(node.uid, (n) => ({
       ...n,
       media: [...(n.media || []), { type: 'image', url: '', caption: '' }]
     }));
   };
 
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/plain', node.uid);
+    e.dataTransfer.effectAllowed = 'move';
+    e.stopPropagation();
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midPoint = rect.top + rect.height / 2;
+    const pos = e.clientY < midPoint ? 'before' : 'after';
+    
+    if (dragOverPos !== pos) {
+      setDragOverPos(pos);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPos(null);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPos(null);
+    const dragUid = e.dataTransfer.getData('text/plain');
+    if (dragUid && dragUid !== node.uid) {
+      onMoveNode(dragUid, node.uid, dragOverPos || 'after');
+    }
+    setIsDraggable(false);
+  };
+
   return (
-    <div className="border border-gray-300 rounded p-0 mb-4 ml-3 bg-white shadow-sm relative group text-xs flex flex-col">
+    <div className="border border-gray-300 rounded p-0 mb-8 ml-3 bg-white shadow-sm relative group text-xs flex flex-col">
       
       {/* STICKY HEADER & ACTION BAR */}
-      <div className={`top-0 z-10 bg-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] transition-all ${isCollapsed ? 'rounded' : 'rounded-t border-b border-gray-200'}`}>
-        
-        {/* Node Title Header (Always visible) */}
+      <div 
+        draggable={isDraggable}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`top-0 z-10 bg-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] transition-all 
+          ${isCollapsed ? 'rounded' : 'rounded-t border-b border-gray-200'}
+          ${dragOverPos === 'before' ? 'border-t-4 border-t-indigo-500 rounded-t' : ''}
+          ${dragOverPos === 'after' ? 'border-b-4 border-b-indigo-500' : ''}
+        `}
+      >
         <div className={`flex gap-1 p-2 items-center bg-gray-50 ${isCollapsed ? 'rounded' : 'rounded-t'}`}>
+          <div 
+            onMouseEnter={() => setIsDraggable(true)}
+            onMouseLeave={() => setIsDraggable(false)}
+            className="flex items-center justify-center p-1 rounded hover:bg-gray-200 transition-colors"
+            title="Drag to move section"
+          >
+            <GripIcon />
+          </div>
+
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)} 
             className="text-gray-500 hover:text-gray-700 hover:bg-gray-200 p-0.5 rounded transition-colors"
@@ -208,6 +338,7 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
           >
             {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
           </button>
+          
           <input
             className="border border-gray-300 p-1 w-16 rounded focus:outline-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-xs"
             placeholder="ID (1.0)"
@@ -228,7 +359,7 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
             onChange={(e) => handleChange('title', e.target.value)}
           />
           <button
-            onClick={() => onDelete(node.id)}
+            onClick={() => onDelete(node.uid)}
             className="text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors p-1 rounded"
             title="Delete Entire Section"
           >
@@ -236,13 +367,12 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
           </button>
         </div>
 
-        {/* Action Buttons Footer (Moved to TOP, visible if expanded) */}
         {!isCollapsed && (
           <div className="flex flex-wrap gap-1 p-2 bg-white">
             <button onClick={handleAddChild} className="bg-blue-500 text-white px-2 py-1 rounded text-[10px] hover:bg-blue-600 shadow-sm transition-colors">
               + Add Sub-section
             </button>
-            <button onClick={() => onAddSibling(node.id)} className="bg-slate-600 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700 shadow-sm transition-colors">
+            <button onClick={() => onAddSibling(node.uid)} className="bg-slate-600 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700 shadow-sm transition-colors">
               + Add Sibling Section
             </button>
             <button onClick={handleAddMetadata} className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors">
@@ -261,7 +391,6 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
         )}
       </div>
 
-      {/* Node Content (Collapsible) */}
       {!isCollapsed && (
         <div className="flex flex-col relative h-full">
           <div className="p-2 pb-0">
@@ -290,7 +419,7 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
               </div>
             )}
 
-            <MediaEditor nodeId={node.id} media={node.media || []} onUpdate={onUpdate} />
+            <MediaEditor nodeId={node.id} media={node.media || []} onUpdate={(id, updater) => onUpdate(node.uid, updater)} />
 
             <textarea
               className="border border-gray-300 p-1.5 w-full rounded mb-1.5 h-16 text-xs focus:outline-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -299,20 +428,20 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
               onChange={(e) => handleChange('content', e.target.value)}
             />
 
-            <FlowchartEditor nodeId={node.id} flowcharts={node.flowcharts || []} onUpdate={onUpdate} />
-            <TableEditor nodeId={node.id} tables={node.tables || []} onUpdate={onUpdate} />
+            <FlowchartEditor nodeId={node.id} flowcharts={node.flowcharts || []} onUpdate={(id, updater) => onUpdate(node.uid, updater)} />
+            <TableEditor nodeId={node.id} tables={node.tables || []} onUpdate={(id, updater) => onUpdate(node.uid, updater)} />
           </div>
 
-          {/* Children nodes container */}
           {node.children && node.children.length > 0 && (
             <div className="mt-2 border-l-2 border-blue-200 pl-2 mx-2 mb-2">
               {node.children.map((child) => (
                 <RecursiveNode 
-                  key={child.id} 
+                  key={child.uid} 
                   node={child} 
                   onUpdate={onUpdate} 
                   onDelete={onDelete} 
                   onAddSibling={onAddSibling}
+                  onMoveNode={onMoveNode}
                 />
               ))}
             </div>
@@ -320,10 +449,10 @@ const RecursiveNode = ({ node, onUpdate, onDelete, onAddSibling }) => {
         </div>
       )}
 
-      {/* STICKY BOTTOM + BUTTON (Add Sibling) */}
+      {/* FIXED: Adjust placement so it doesn't overlap text fields below it */}
       <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 z-10 opacity-70 hover:opacity-100 transition-opacity">
         <button
-          onClick={() => onAddSibling(node.id)}
+          onClick={() => onAddSibling(node.uid)}
           className="bg-white border border-gray-300 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-blue-500 rounded-full flex items-center justify-center shadow-sm transition-all h-6 w-6"
           title="Add Section Below (Same Level)"
         >
@@ -340,7 +469,7 @@ export default function DataExtractor({ sop, onClose }) {
   const [isPdfLoading, setIsPdfLoading] = useState(!!sop?.pdfPathBase64);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
-  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const [saveStatus, setSaveStatus] = useState('idle'); 
   const fileInputRef = useRef(null); 
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
@@ -386,14 +515,17 @@ export default function DataExtractor({ sop, onClose }) {
   
   const [documentData, setDocumentData] = useState(() => {
     if (sop?.data?.sections) {
-      return sop.data;
+      return {
+        ...sop.data,
+        sections: ensureUids(sop.data.sections)
+      };
     }
 
     return {
       metadata: [],
       filters: [],
       sections: [
-        { id: '1.0', title: '', content: '', pageNumbers: '', metadata: [], flowcharts: [], tables: [], media: [], children: [] }
+        { uid: generateUid(), id: '1.0', title: '', content: '', pageNumbers: '', metadata: [], flowcharts: [], tables: [], media: [], children: [] }
       ]
     };
   });
@@ -458,9 +590,9 @@ export default function DataExtractor({ sop, onClose }) {
         setDocumentData({
           metadata: importedData.metadata || [],
           filters: importedData.filters || [],
-          sections: importedData.sections || [
-            { id: '1.0', title: '', content: '', pageNumbers: '', metadata: [], flowcharts: [], tables: [], media: [], children: [] }
-          ]
+          sections: ensureUids(importedData.sections || [
+            { uid: generateUid(), id: '1.0', title: '', content: '', pageNumbers: '', metadata: [], flowcharts: [], tables: [], media: [], children: [] }
+          ])
         });
         
       } catch (error) {
@@ -520,25 +652,44 @@ export default function DataExtractor({ sop, onClose }) {
     }));
   };
 
-  const handleNodeUpdate = (id, updater) => {
+  const handleNodeUpdate = (uid, updater) => {
     setDocumentData((prev) => ({
       ...prev,
-      sections: updateTree(prev.sections, id, updater)
+      sections: updateTree(prev.sections, uid, updater)
     }));
   };
 
-  const handleNodeDelete = (id) => {
+  const handleNodeDelete = (uid) => {
     setDocumentData((prev) => ({
       ...prev,
-      sections: deleteTree(prev.sections, id)
+      sections: deleteTree(prev.sections, uid)
     }));
   };
 
-  const handleAddSibling = (id) => {
+  const handleAddSibling = (uid) => {
     setDocumentData((prev) => ({
       ...prev,
-      sections: insertAfter(prev.sections, id)
+      sections: insertAfter(prev.sections, uid)
     }));
+  };
+
+  const handleMoveNode = (dragUid, dropUid, position) => {
+    if (dragUid === dropUid) return;
+
+    setDocumentData((prev) => {
+      if (isDescendant(prev.sections, dragUid, dropUid)) {
+        alert("Cannot drop a section into its own sub-section.");
+        return prev;
+      }
+
+      const dragNode = findNode(prev.sections, dragUid);
+      if (!dragNode) return prev;
+
+      const treeWithoutDragNode = removeNode(prev.sections, dragUid);
+      const newTree = insertNode(treeWithoutDragNode, dropUid, dragNode, position);
+
+      return { ...prev, sections: newTree };
+    });
   };
 
   const addRootSection = () => {
@@ -546,7 +697,7 @@ export default function DataExtractor({ sop, onClose }) {
       ...prev,
       sections: [
         ...prev.sections,
-        { id: `${prev.sections.length + 1}.0`, title: '', content: '', pageNumbers: '', metadata: [], flowcharts: [], tables: [], media: [], children: [] }
+        { uid: generateUid(), id: `${prev.sections.length + 1}.0`, title: '', content: '', pageNumbers: '', metadata: [], flowcharts: [], tables: [], media: [], children: [] }
       ]
     }));
   };
@@ -765,11 +916,12 @@ export default function DataExtractor({ sop, onClose }) {
               {/* Sections Form Tree */}
               {documentData.sections.map((rootNode) => (
                 <RecursiveNode 
-                  key={rootNode.id} 
+                  key={rootNode.uid} 
                   node={rootNode} 
                   onUpdate={handleNodeUpdate} 
                   onDelete={handleNodeDelete} 
                   onAddSibling={handleAddSibling}
+                  onMoveNode={handleMoveNode}
                 />
               ))}
             </>

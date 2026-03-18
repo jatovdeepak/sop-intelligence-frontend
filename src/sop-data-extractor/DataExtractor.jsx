@@ -223,6 +223,7 @@ export default function DataExtractor({ sop, onClose }) {
   const [isPdfLoading, setIsPdfLoading] = useState(!!sop?.pdfPathBase64);
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const fileInputRef = useRef(null); 
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
@@ -296,6 +297,8 @@ export default function DataExtractor({ sop, onClose }) {
     if (!sop?._id) return;
 
     const timer = setTimeout(async () => {
+      setSaveStatus('saving'); // 1. Tell the UI we are trying to save
+      
       try {
         const token = localStorage.getItem("token");
         const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
@@ -306,15 +309,19 @@ export default function DataExtractor({ sop, onClose }) {
           },
           body: JSON.stringify({ 
             data: documentData,
-            lastExtractedTime: new Date().toISOString() // <-- NEW: Send current timestamp on every auto-save
+            lastExtractedTime: new Date().toISOString() // <-- Send current timestamp on every auto-save
           }) 
         });
 
         if (response.ok) {
           setLastSaved(new Date());
+          setSaveStatus('saved'); // 2. Success!
+        } else {
+          setSaveStatus('error'); // 3. Server responded, but it was an error (e.g., 500)
         }
       } catch (err) {
         console.error("Auto-save failed:", err);
+        setSaveStatus('error');   // 4. Network request completely failed
       }
     }, 1500);
     
@@ -474,11 +481,26 @@ export default function DataExtractor({ sop, onClose }) {
           <h2 className="text-base font-bold">Data Extraction</h2>
           
           <div className="flex items-center gap-1">
-            {lastSaved && (
-              <span className="text-[10px] text-emerald-600 mr-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">
+            {/* NEW STATUS INDICATORS START HERE */}
+            {saveStatus === 'saving' && (
+              <span className="text-[10px] text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded animate-pulse mr-1">
+                Saving...
+              </span>
+            )}
+            
+            {saveStatus === 'error' && (
+              <span className="text-[10px] text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-red-300 mr-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Save Failed!
+              </span>
+            )}
+
+            {saveStatus === 'saved' && lastSaved && (
+              <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded mr-1">
                 Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
+            {/* NEW STATUS INDICATORS END HERE */}
             
             <button 
               onClick={() => setShowJson(!showJson)} 

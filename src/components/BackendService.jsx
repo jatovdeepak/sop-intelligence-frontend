@@ -87,7 +87,7 @@ export default function BackendService() {
     (safeMetrics.memory.heapUsed / safeMetrics.memory.heapTotal) * 100 : 0;
 
   return (
-    <div className="space-y-6 text-left bg-slate-50 p-5 rounded-xl border border-slate-200">
+    <div className="space-y-6 text-left bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm">
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
         <div>
@@ -107,7 +107,7 @@ export default function BackendService() {
               connectionStatus === 'offline' ? 'text-red-700 border-red-200' : 
               'text-amber-700 border-amber-200'}`}>
             {connectionStatus === 'online' ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-            Socket: {connectionStatus.toUpperCase()}
+            Status: {connectionStatus.toUpperCase()}
           </span>
           
           <span className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border bg-white

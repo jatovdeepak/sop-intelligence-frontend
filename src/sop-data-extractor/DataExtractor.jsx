@@ -413,12 +413,12 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
                 >
                   + Add Sub-section
                 </button>
-                <button
+                {/* <button
                   onClick={() => onAddSibling(node.uid)}
                   className="bg-slate-600 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700 shadow-sm transition-colors"
                 >
                   + Add Sibling Section
-                </button>
+                </button> */}
                 <button
                   onClick={handleAddMetadata}
                   className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors"
@@ -900,24 +900,29 @@ export default function DataExtractor({ sop, onClose }) {
   };
 
   const downloadJson = () => {
+    // 1. Prepare the data string
     const dataStr =
       "data:text/json;charset=utf-8," +
       encodeURIComponent(JSON.stringify(documentData, null, 2));
+    
+    // 2. Create the hidden anchor element
     const downloadAnchorNode = document.createElement("a");
     downloadAnchorNode.setAttribute("href", dataStr);
-
-    const sopIdMeta = documentData.metadata.find(
-      (m) =>
-        m.key.toLowerCase().includes("id") ||
-        m.key.toLowerCase().includes("sop")
-    );
-    const fileName = sopIdMeta?.value
-      ? `${sopIdMeta.value.replace(/[^a-z0-9]/gi, "_")}_extraction.json`
-      : "sop_extraction.json";
-
+  
+    // 3. Use sop.sopId for the filename
+    // We'll use a fallback just in case sopId is missing
+    const idSuffix = sop?.sopId 
+      ? sop.sopId.toString().replace(/[^a-z0-9]/gi, "_") 
+      : "default";
+      
+    const fileName = `${idSuffix}_extraction.json`;
+  
+    // 4. Trigger the download
     downloadAnchorNode.setAttribute("download", fileName);
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
+    
+    // 5. Clean up
     downloadAnchorNode.remove();
   };
 

@@ -320,10 +320,13 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
       ...n,
       tables: [
         ...(n.tables || []),
-        [
-          ["", ""],
-          ["", ""],
-        ],
+        {
+          title: "", // New title field
+          data: [    // Rows moved inside 'data'
+            ["", ""],
+            ["", ""],
+          ]
+        }
       ],
     }));
   };

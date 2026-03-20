@@ -18,8 +18,8 @@ export default function Topbar() {
   return (
     <header className="flex h-16 items-center justify-between border-b border-black/10 bg-white px-6 shadow-sm">
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <span className="h-2 w-2 rounded-full bg-green-500" />
-        Online
+        {/* <span className="h-2 w-2 rounded-full bg-green-500" />
+        Online */}
       </div>
 
       <input

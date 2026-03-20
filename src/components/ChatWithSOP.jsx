@@ -32,7 +32,8 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [activeMedia, setActiveMedia] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
   
-  // 🔥 NEW: Approval State
+  // 🔥 NEW: Admin & Approval State
+  const [isAdmin, setIsAdmin] = useState(false); // <-- Admin check state
   const [approvingIndex, setApprovingIndex] = useState(null);
   const [adminComment, setAdminComment] = useState("");
   const [isApproving, setIsApproving] = useState(false);
@@ -62,6 +63,10 @@ export default function ChatWithSOP({ sop, onClose }) {
     }
     setUserId(storedId);
     fetchHistory(storedId);
+
+    // 🔥 NEW: Check for Admin Role in Local Storage
+    const userRole = localStorage.getItem("role");
+    setIsAdmin(userRole === "Admin");
   }, []);
 
   useEffect(() => {
@@ -104,7 +109,7 @@ export default function ChatWithSOP({ sop, onClose }) {
     }, 0);
   };
 
-  // 🔥 NEW: Function to submit approval to backend
+  // 🔥 Function to submit approval to backend
   const submitApproval = async (index, msg) => {
     if (isRagOffline) return;
     setIsApproving(true);
@@ -115,14 +120,13 @@ export default function ChatWithSOP({ sop, onClose }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           document_id: safeDocumentId,
-          question: msg.originalQuestion, // Reliably passes the exact user query
+          question: msg.originalQuestion,
           answer: msg.content,
           admin_comment: adminComment,
         }),
       });
 
       if (res.ok) {
-        // Update the message in local state so the UI reflects the approval immediately
         setMessages((prev) =>
           prev.map((m, i) =>
             i === index
@@ -184,7 +188,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               isApproved: item.is_approved,
               adminComment: item.admin_comment,
               media: item.media || [],
-              originalQuestion: item.question, // 🔥 Stored for future approvals
+              originalQuestion: item.question,
               timestamp: msgTime,
             });
           }
@@ -216,7 +220,7 @@ export default function ChatWithSOP({ sop, onClose }) {
       if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
     setLoading(true);
-    setApprovingIndex(null); // Reset approval UI if a new search starts
+    setApprovingIndex(null); 
 
     try {
       const res = await fetch(`${API_URL}/user/chat`, {
@@ -260,7 +264,7 @@ export default function ChatWithSOP({ sop, onClose }) {
             isApproved: data.is_approved || false,
             adminComment: data.admin_comment || "",
             media: data.media || [],
-            originalQuestion: currentQuestion, // 🔥 Stored for future approvals
+            originalQuestion: currentQuestion,
             timestamp: new Date(),
           },
         ]);
@@ -622,8 +626,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
                         )}
 
-                        {/* Inline Approval Form */}
-                        {approvingIndex === i && !msg.isApproved && (
+                        {/* 🔥 NEW: Inline Approval Form (Only visible for Admins) */}
+                        {approvingIndex === i && !msg.isApproved && isAdmin && (
                           <div className="mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex flex-col gap-2">
                             <label className="text-xs font-semibold text-emerald-800">
                               Add Admin Note (Optional)
@@ -664,8 +668,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {/* 🔥 NEW: Approve Button */}
-                            {!msg.isApproved && approvingIndex !== i && (
+                            {/* 🔥 NEW: Approve Button (Only visible for Admins) */}
+                            {!msg.isApproved && approvingIndex !== i && isAdmin && (
                               <button
                                 onClick={() => {
                                   setApprovingIndex(i);

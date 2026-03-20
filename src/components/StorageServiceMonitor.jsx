@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
+import React from 'react';
+import { useServiceStatus } from '../context/ServiceStatusContext'; // Adjust path as needed
 import { 
   Activity, DatabaseBackup, Database, Cpu, 
   HardDrive, Clock, Wifi, WifiOff 
@@ -29,37 +29,8 @@ const formatUptime = (seconds) => {
 };
 
 export default function StorageServiceMonitor() {
-  const [metrics, setMetrics] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
-
-  // Ensure this points to the port where your Storage Express app runs (5001)
-  const STORAGE_API_URL = import.meta.env.VITE_STORAGE_API_BASE_URL || 'http://localhost:5001';
-
-  useEffect(() => {
-    const socket = io(STORAGE_API_URL, {
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 2000
-    });
-
-    socket.on('connect', () => setConnectionStatus('online'));
-
-    socket.on('disconnect', () => {
-      setConnectionStatus('offline');
-      setMetrics(null); 
-    });
-
-    socket.on('connect_error', () => {
-      setConnectionStatus('reconnecting');
-      setMetrics(null); 
-    });
-
-    socket.on('server_status', (data) => {
-      setMetrics(data);
-    });
-
-    return () => socket.disconnect();
-  }, [STORAGE_API_URL]);
+  const { storage } = useServiceStatus();
+  const { metrics, status: connectionStatus } = storage;
 
   if (!metrics && connectionStatus !== 'online') {
     return (

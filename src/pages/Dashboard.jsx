@@ -1,52 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { 
   FileText, 
   Search, 
   Download 
 } from "lucide-react";
-import { io } from "socket.io-client";
+import { useServiceStatus } from "../context/ServiceStatusContext"; // Adjust path if needed
 
 import StatCard from "../components/StatCard";
 import SOPOverviewChart from "../components/SOPOverviewChart";
 import MonthlySOPChart from "../components/MonthlySOPChart";
 
 export default function Dashboard() {
-
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🔥 SERVER STATUS STATE
-  const [serverStatus, setServerStatus] = useState("checking");
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "";
-
-  useEffect(() => {
-    const socket = io(API_URL, {
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 2000
-    });
-
-    socket.on("connect", () => {
-      setServerStatus("online");
-    });
-
-    socket.on("server_status", (data) => {
-      if (data?.status === "online") {
-        setServerStatus("online");
-      } else {
-        setServerStatus("degraded");
-      }
-    });
-
-    socket.on("disconnect", () => {
-      setServerStatus("offline");
-    });
-
-    socket.on("connect_error", () => {
-      setServerStatus("reconnecting");
-    });
-
-    return () => socket.disconnect();
-  }, []);
+  // 🔥 SERVER STATUS FROM GLOBAL CONTEXT
+  const { backend } = useServiceStatus();
+  
+  // Derive the exact status for the UI
+  let activeStatus = backend.status; // 'connecting', 'online', 'offline', 'reconnecting'
+  
+  // If socket is connected but the payload explicitly says it's not online, mark as degraded
+  if (backend.status === "online" && backend.metrics && backend.metrics.status !== "online") {
+    activeStatus = "degraded";
+  }
 
   const topStats = [
     { title: "Total SOPs", value: "120", note: "+6 this month" },
@@ -72,7 +48,7 @@ export default function Dashboard() {
       color: "amber",
       pulse: true
     },
-    checking: {
+    connecting: { // Changed from 'checking' to match context state
       text: "Checking...",
       color: "slate",
       pulse: true
@@ -84,7 +60,8 @@ export default function Dashboard() {
     }
   };
 
-  const currentStatus = statusConfig[serverStatus];
+  // Fallback to 'connecting' if state is somehow undefined
+  const currentStatus = statusConfig[activeStatus] || statusConfig.connecting;
 
   return (
     <div>

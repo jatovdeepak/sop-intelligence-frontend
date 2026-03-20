@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Globe, HelpCircle, ArrowRight, CheckCircle, Sparkles, Image as ImageIcon, Video, Maximize2, Play } from "lucide-react";
+import { 
+  X, Send, Globe, HelpCircle, ArrowRight, CheckCircle, 
+  Sparkles, Image as ImageIcon, Video, Maximize2, Play, WifiOff 
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MediaModal from "../components/MediaModal";
+import { useServiceStatus } from "../context/ServiceStatusContext"; // 👈 Add this import
 
 export default function ChatWithSOP({ sop, onClose }) {
   // --- STATE & REFS ---
@@ -12,6 +16,10 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [loading, setLoading] = useState(false);
   const [activeMedia, setActiveMedia] = useState(null); 
   const bottomRef = useRef(null);
+
+  // 🔥 RAG SERVICE STATUS
+  const { rag } = useServiceStatus();
+  const isRagOffline = rag.status !== "online" && rag.status !== "connecting";
 
   const API_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
 
@@ -82,6 +90,8 @@ export default function ChatWithSOP({ sop, onClose }) {
   };
 
   const handleAsk = async (queryOverride = null, skipCache = false) => {
+    if (isRagOffline) return; // Prevent asking if offline
+    
     const currentQuestion = queryOverride || question;
     if (!currentQuestion.trim()) return;
 
@@ -174,10 +184,29 @@ export default function ChatWithSOP({ sop, onClose }) {
                 <p className="text-sm text-slate-500">{sop?.sopId ?? "SOP"} · {sop?.title ?? "."}</p>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-lg p-2 hover:bg-orange-100 transition-colors">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-4">
+               {/* Small indicator dot in header for service status */}
+              <div className="flex items-center gap-2 text-xs font-medium bg-white px-2 py-1 rounded-md border shadow-sm">
+                <div className={`w-2 h-2 rounded-full ${isRagOffline ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
+                <span className={isRagOffline ? 'text-slate-600' : 'text-slate-600'}>
+                  {isRagOffline ? 'RAG Disconnected' : 'RAG Connected'}
+                </span>
+              </div>
+              <button onClick={onClose} className="rounded-lg p-2 hover:bg-orange-100 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
+
+          {/* 🔥 Service Down Alert Banner */}
+          {isRagOffline && (
+            <div className="bg-red-50 border-b border-red-200 px-6 py-3 shrink-0 flex items-center gap-3 text-red-700 text-sm">
+              <WifiOff className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <p>
+                <strong>Connection Lost:</strong> The RAG AI Service is currently offline. You can view your chat history, but new questions cannot be answered right now.
+              </p>
+            </div>
+          )}
 
           {/* Chat Area */}
           <div className="flex-1 overflow-y-auto bg-white px-6 py-6 space-y-6">
@@ -204,14 +233,16 @@ export default function ChatWithSOP({ sop, onClose }) {
                             <button
                               key={idx}
                               onClick={() => handleAsk(sug, false)}
-                              className="text-left px-3 py-2 text-sm border border-slate-300 bg-white rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-colors"
+                              disabled={isRagOffline}
+                              className="text-left px-3 py-2 text-sm border border-slate-300 bg-white rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-300 disabled:hover:text-slate-800"
                             >
                               "{sug}"
                             </button>
                           ))}
                           <button
                             onClick={() => handleAsk(msg.originalQuestion, true)}
-                            className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-200 text-slate-500 transition-colors mt-2"
+                            disabled={isRagOffline}
+                            className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-200 text-slate-500 transition-colors mt-2 disabled:opacity-50"
                           >
                             <ArrowRight className="w-4 h-4" />
                             None of these, search anyway.
@@ -366,10 +397,18 @@ export default function ChatWithSOP({ sop, onClose }) {
           <div className="border-t px-6 py-3 bg-white shrink-0">
             <div className="mb-2 text-sm text-slate-500">Suggestions:</div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => handleAsk("give all points of Monthly Preventive Maintenance.")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
+              <button 
+                onClick={() => handleAsk("give all points of Monthly Preventive Maintenance.")} 
+                disabled={isRagOffline}
+                className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
+              >
                 give all points of Monthly Preventive Maintenance.
               </button>
-              <button onClick={() => handleAsk("How do I check the turret for free rotation?")} className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors">
+              <button 
+                onClick={() => handleAsk("How do I check the turret for free rotation?")} 
+                disabled={isRagOffline}
+                className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
+              >
                 How do I check the turret for free rotation?
               </button>
             </div>
@@ -377,25 +416,31 @@ export default function ChatWithSOP({ sop, onClose }) {
 
           {/* Input Area */}
           <div className="border-t px-6 py-4 bg-white shrink-0">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500 transition-all">
+            <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all
+              ${isRagOffline 
+                ? 'bg-slate-100 border-slate-200 opacity-70' 
+                : 'bg-slate-50 border-slate-200 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500'}`}
+            >
               <input
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAsk()}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                placeholder={`Ask about ${sop?.id ?? "this SOP"}...`}
-                disabled={loading}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+                placeholder={isRagOffline ? "Service disconnected..." : `Ask about ${sop?.id ?? "this SOP"}...`}
+                disabled={loading || isRagOffline}
               />
               <Globe className="h-4 w-4 text-slate-400" />
               <button 
                 onClick={() => handleAsk()}
-                disabled={loading || !question.trim()}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors"
+                disabled={loading || !question.trim() || isRagOffline}
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors disabled:cursor-not-allowed"
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-2 text-xs text-slate-400 text-center">Press Enter to send, Shift+Enter for new line</p>
+            <p className="mt-2 text-xs text-slate-400 text-center">
+              {isRagOffline ? "Chat is unavailable while service is offline." : "Press Enter to send, Shift+Enter for new line"}
+            </p>
           </div>
         </div>
       </div>

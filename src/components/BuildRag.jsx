@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from "react";
-import { Loader2, CheckCircle2, XCircle, X } from "lucide-react";
-import toast from "react-hot-toast"; // Added toast import
+import { Loader2, CheckCircle2, XCircle, X, WifiOff } from "lucide-react";
+import toast from "react-hot-toast";
+import { useServiceStatus } from "../context/ServiceStatusContext"; // 👈 Added context import
 
 export default function BuildRag({ sop, onClose }) {
-  const [status, setStatus] = useState("loading"); // 'loading', 'success', 'error'
+  const [status, setStatus] = useState("loading"); // 'loading', 'success', 'error', 'offline'
   const [message, setMessage] = useState("");
   
   // Use a ref to prevent double-firing in React StrictMode
   const hasTriggered = useRef(false);
+
+  // 🔥 RAG SERVICE STATUS
+  const { rag } = useServiceStatus();
+  const isRagOffline = rag.status !== "online" && rag.status !== "connecting";
 
   // Point to your Express Backend (Node.js) to update MongoDB
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
@@ -70,9 +75,9 @@ export default function BuildRag({ sop, onClose }) {
         const successMsg = data.message || `Successfully embedded SOP ${safeDocumentId}`;
         setStatus("success");
         setMessage(successMsg);
-        toast.success("RAG database updated successfully!"); // Success toast
+        toast.success("RAG database updated successfully!"); 
         
-        // --- NEW: Auto-close and open chat after success ---
+        // --- Auto-close and open chat after success ---
         setTimeout(() => {
           onClose();
         }, 1500);
@@ -81,14 +86,21 @@ export default function BuildRag({ sop, onClose }) {
         const errorMsg = err.message || "An unexpected error occurred.";
         setStatus("error");
         setMessage(errorMsg);
-        toast.error(errorMsg); // Error toast
+        toast.error(errorMsg);
       }
     };
 
     if (sop && !hasTriggered.current) {
+      // 🔥 INTERCEPT IF OFFLINE
+      if (isRagOffline) {
+        setStatus("offline");
+        toast.error("Cannot build: RAG Service is offline.");
+        return; 
+      }
+
       hasTriggered.current = true;
 
-      // --- NEW: Time Comparison Logic ---
+      // --- Time Comparison Logic ---
       const extractedTime = new Date(sop.lastExtractedTime || 0).getTime();
       const ragTime = new Date(sop.lastRagBuildTime || 0).getTime();
 
@@ -99,13 +111,13 @@ export default function BuildRag({ sop, onClose }) {
         // Already up to date! Skip building and just open the chat
         setStatus("success");
         setMessage("RAG memory is already up to date!");
-        toast.success("RAG memory is up to date!"); // Skip toast
+        toast.success("RAG memory is up to date!"); 
         setTimeout(() => {
           onClose();
         }, 1000);
       }
     }
-  }, [sop, onClose]);
+  }, [sop, onClose, isRagOffline]); // Added isRagOffline to dependencies
 
   return (
     <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
@@ -117,6 +129,8 @@ export default function BuildRag({ sop, onClose }) {
       </button>
 
       <div className="flex flex-col items-center justify-center py-6 text-center">
+        
+        {/* LOADING STATE */}
         {status === "loading" && (
           <>
             <Loader2 className="h-12 w-12 animate-spin text-orange-500 mb-4" />
@@ -127,6 +141,7 @@ export default function BuildRag({ sop, onClose }) {
           </>
         )}
 
+        {/* SUCCESS STATE */}
         {status === "success" && (
           <>
             <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-4" />
@@ -138,6 +153,7 @@ export default function BuildRag({ sop, onClose }) {
           </>
         )}
 
+        {/* ERROR STATE */}
         {status === "error" && (
           <>
             <XCircle className="h-12 w-12 text-red-500 mb-4" />
@@ -151,6 +167,24 @@ export default function BuildRag({ sop, onClose }) {
             </button>
           </>
         )}
+
+        {/* 🔥 NEW: OFFLINE STATE */}
+        {status === "offline" && (
+          <>
+            <WifiOff className="h-12 w-12 text-slate-400 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-800">Service Offline</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              The RAG AI Service is currently disconnected. We cannot process or embed this document right now.
+            </p>
+            <button
+              onClick={onClose}
+              className="mt-6 w-full rounded-lg bg-orange-100 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-200 transition"
+            >
+              Go Back
+            </button>
+          </>
+        )}
+
       </div>
     </div>
   );

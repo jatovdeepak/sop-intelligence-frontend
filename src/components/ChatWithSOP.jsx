@@ -87,6 +87,17 @@ export default function ChatWithSOP({ sop, onClose }) {
     }
   };
 
+  // 🔥 NEW: Function to handle suggestion clicks
+  const handleSuggestionClick = (text) => {
+    setQuestion(text);
+    // Automatically focus the input field so the user can easily hit Enter or edit
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }, 0);
+  };
+
   // --- API FUNCTIONS ---
   const fetchHistory = async (id) => {
     try {
@@ -344,7 +355,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                           {msg.suggestions.map((sug, idx) => (
                             <button
                               key={idx}
-                              onClick={() => handleAsk(sug, false)}
+                              onClick={() => handleSuggestionClick(sug)} // 🔥 CHANGED
                               disabled={isRagOffline}
                               className="text-left px-3 py-2 text-sm border border-slate-300 bg-white rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-300 disabled:hover:text-slate-800"
                             >
@@ -354,7 +365,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                           <button
                             onClick={() =>
                               handleAsk(msg.originalQuestion, true)
-                            }
+                            } // 🔥 Kept as handleAsk so "Search Anyway" still triggers the search automatically
                             disabled={isRagOffline}
                             className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-200 text-slate-500 transition-colors mt-2 disabled:opacity-50"
                           >
@@ -403,7 +414,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                               if (isVideo) {
                                 return (
                                   <div
-                                    // 👈 Reduced max-w-lg to max-w-sm
                                     className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
                                     onClick={() => setActiveMedia(mediaObj)}
                                   >
@@ -413,7 +423,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                                     />
                                     <video
                                       src={src}
-                                      // 👈 Reduced max-h-[300px] to max-h-[200px]
                                       className="w-full max-h-[200px] object-contain bg-black"
                                     />
                                     <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
@@ -437,14 +446,12 @@ export default function ChatWithSOP({ sop, onClose }) {
 
                               return (
                                 <div
-                                  // 👈 Reduced max-w-lg to max-w-sm
                                   className="my-4 max-w-sm relative group cursor-pointer"
                                   onClick={() => setActiveMedia(mediaObj)}
                                 >
                                   <img
                                     src={src}
                                     alt={alt}
-                                    // 👈 Reduced max-h-[400px] to max-h-[240px]
                                     className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
                                   />
                                   <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
@@ -482,7 +489,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                                 <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">
                                   Additional Resources
                                 </p>
-                                {/* 👈 Changed grid-cols-1 sm:grid-cols-2 to grid-cols-2 sm:grid-cols-3 to make items smaller */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                   {unusedMedia.map((m, idx) => {
                                     const isVideo =
@@ -528,7 +534,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                                             <img
                                               src={m.url}
                                               alt={m.caption || "SOP Reference"}
-                                              // 👈 Reduced h-40 to h-24
                                               className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
                                             />
                                             <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
@@ -597,19 +602,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                                 </>
                               )}
                             </button>
-                            {/* <div className="w-px h-3 bg-slate-300 mx-1"></div> */}
-                            {/* <button
-                              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                              title="Helpful"
-                            >
-                              <ThumbsUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Not Helpful"
-                            >
-                              <ThumbsDown className="w-3.5 h-3.5" />
-                            </button> */}
                           </div>
                         </div>
                       </div>
@@ -645,7 +637,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               <div className="text-sm text-slate-500">Suggestions:</div>
               <button
                 onClick={() =>
-                  handleAsk(
+                  handleSuggestionClick( // 🔥 CHANGED
                     "Can you summarize the main objective and scope of this SOP?"
                   )
                 }
@@ -656,7 +648,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               </button>
               <button
                 onClick={() =>
-                  handleAsk(
+                  handleSuggestionClick( // 🔥 CHANGED
                     "What are the key safety precautions, warnings, or prerequisites mentioned?"
                   )
                 }
@@ -667,7 +659,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               </button>
               <button
                 onClick={() =>
-                  handleAsk(
+                  handleSuggestionClick( // 🔥 CHANGED
                     "List the step-by-step instructions for the primary procedure."
                   )
                 }

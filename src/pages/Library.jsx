@@ -141,14 +141,14 @@ export default function Library() {
             />
 
             {/* NEW MENU ITEM FOR BUILD RAG */}
-            <MenuItem
+            {/* <MenuItem
               icon={Database}
               label="Build RAG Context"
               onClick={() => {
                 onBuildRag();
                 setOpen(false);
               }}
-            />
+            /> */}
 
             <MenuItem icon={History} label="View Version" />
             <MenuItem

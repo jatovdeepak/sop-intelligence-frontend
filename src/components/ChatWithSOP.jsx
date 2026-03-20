@@ -87,10 +87,12 @@ export default function ChatWithSOP({ sop, onClose }) {
     }
   };
 
-  // 🔥 NEW: Function to handle suggestion clicks
+  // 🔥 UPDATED: Function to handle suggestion clicks and auto-send
   const handleSuggestionClick = (text) => {
     setQuestion(text);
-    // Automatically focus the input field so the user can easily hit Enter or edit
+    handleAsk(text); // <-- Add this to actually send the query to the server
+    
+    // You can optionally keep the focus logic if you want the cursor back in the box after sending
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -577,9 +579,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                         {/* Action Bar */}
                         <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2">
                           <div className="text-xs text-slate-500">
-                            {msg.source === "cache"
-                              ? "⚡ Answered from Cache"
-                              : ""}
+                            {msg.source?.includes("cache") ? "⚡ Answered from Cache" : ""}
                           </div>
 
                           <div className="flex items-center gap-2">

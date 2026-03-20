@@ -31,6 +31,12 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [loading, setLoading] = useState(false);
   const [activeMedia, setActiveMedia] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
+  
+  // 🔥 NEW: Approval State
+  const [approvingIndex, setApprovingIndex] = useState(null);
+  const [adminComment, setAdminComment] = useState("");
+  const [isApproving, setIsApproving] = useState(false);
+
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -87,17 +93,54 @@ export default function ChatWithSOP({ sop, onClose }) {
     }
   };
 
-  // 🔥 UPDATED: Function to handle suggestion clicks and auto-send
   const handleSuggestionClick = (text) => {
     setQuestion(text);
-    handleAsk(text); // <-- Add this to actually send the query to the server
+    handleAsk(text); 
     
-    // You can optionally keep the focus logic if you want the cursor back in the box after sending
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
     }, 0);
+  };
+
+  // 🔥 NEW: Function to submit approval to backend
+  const submitApproval = async (index, msg) => {
+    if (isRagOffline) return;
+    setIsApproving(true);
+    
+    try {
+      const res = await fetch(`${API_URL}/admin/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document_id: safeDocumentId,
+          question: msg.originalQuestion, // Reliably passes the exact user query
+          answer: msg.content,
+          admin_comment: adminComment,
+        }),
+      });
+
+      if (res.ok) {
+        // Update the message in local state so the UI reflects the approval immediately
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === index
+              ? { ...m, isApproved: true, adminComment: adminComment }
+              : m
+          )
+        );
+        setApprovingIndex(null);
+        setAdminComment("");
+      } else {
+        alert("Failed to approve answer. Please check server logs.");
+      }
+    } catch (error) {
+      console.error("Approval error:", error);
+      alert("An error occurred while approving.");
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   // --- API FUNCTIONS ---
@@ -141,6 +184,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               isApproved: item.is_approved,
               adminComment: item.admin_comment,
               media: item.media || [],
+              originalQuestion: item.question, // 🔥 Stored for future approvals
               timestamp: msgTime,
             });
           }
@@ -172,6 +216,7 @@ export default function ChatWithSOP({ sop, onClose }) {
       if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
     setLoading(true);
+    setApprovingIndex(null); // Reset approval UI if a new search starts
 
     try {
       const res = await fetch(`${API_URL}/user/chat`, {
@@ -215,6 +260,7 @@ export default function ChatWithSOP({ sop, onClose }) {
             isApproved: data.is_approved || false,
             adminComment: data.admin_comment || "",
             media: data.media || [],
+            originalQuestion: currentQuestion, // 🔥 Stored for future approvals
             timestamp: new Date(),
           },
         ]);
@@ -357,7 +403,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                           {msg.suggestions.map((sug, idx) => (
                             <button
                               key={idx}
-                              onClick={() => handleSuggestionClick(sug)} // 🔥 CHANGED
+                              onClick={() => handleSuggestionClick(sug)}
                               disabled={isRagOffline}
                               className="text-left px-3 py-2 text-sm border border-slate-300 bg-white rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-300 disabled:hover:text-slate-800"
                             >
@@ -367,7 +413,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                           <button
                             onClick={() =>
                               handleAsk(msg.originalQuestion, true)
-                            } // 🔥 Kept as handleAsk so "Search Anyway" still triggers the search automatically
+                            }
                             disabled={isRagOffline}
                             className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-200 text-slate-500 transition-colors mt-2 disabled:opacity-50"
                           >
@@ -576,13 +622,66 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
                         )}
 
+                        {/* Inline Approval Form */}
+                        {approvingIndex === i && !msg.isApproved && (
+                          <div className="mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex flex-col gap-2">
+                            <label className="text-xs font-semibold text-emerald-800">
+                              Add Admin Note (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={adminComment}
+                              onChange={(e) => setAdminComment(e.target.value)}
+                              className="text-sm px-2 py-1.5 border border-emerald-200 rounded outline-none focus:border-emerald-400 bg-white"
+                              placeholder="e.g., Verified against standard procedure..."
+                              disabled={isApproving}
+                            />
+                            <div className="flex items-center justify-end gap-2 mt-1">
+                              <button
+                                onClick={() => setApprovingIndex(null)}
+                                className="text-xs font-medium text-slate-500 hover:text-slate-700 px-2 py-1"
+                                disabled={isApproving}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => submitApproval(i, msg)}
+                                disabled={isApproving}
+                                className="text-xs font-medium bg-emerald-500 text-white px-3 py-1.5 rounded hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                              >
+                                {isApproving ? "Approving..." : "Confirm Approval"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Action Bar */}
                         <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2">
                           <div className="text-xs text-slate-500">
-                            {msg.source?.includes("cache") ? "⚡ Answered from Cache" : ""}
+                            {msg.source?.includes("cache")
+                              ? "⚡ Answered from Cache"
+                              : ""}
                           </div>
 
                           <div className="flex items-center gap-2">
+                            {/* 🔥 NEW: Approve Button */}
+                            {!msg.isApproved && approvingIndex !== i && (
+                              <button
+                                onClick={() => {
+                                  setApprovingIndex(i);
+                                  setAdminComment("");
+                                }}
+                                disabled={isRagOffline}
+                                className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                                title="Approve this answer"
+                              >
+                                <ThumbsUp className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-medium">
+                                  Approve
+                                </span>
+                              </button>
+                            )}
+
                             <button
                               onClick={() => handleCopy(msg.content, i)}
                               className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded transition-colors flex items-center gap-1"
@@ -598,7 +697,9 @@ export default function ChatWithSOP({ sop, onClose }) {
                               ) : (
                                 <>
                                   <Copy className="w-3.5 h-3.5" />{" "}
-                                  <span className="text-[10px]">Copy</span>
+                                  <span className="text-[10px] font-medium">
+                                    Copy
+                                  </span>
                                 </>
                               )}
                             </button>
@@ -637,7 +738,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               <div className="text-sm text-slate-500">Suggestions:</div>
               <button
                 onClick={() =>
-                  handleSuggestionClick( // 🔥 CHANGED
+                  handleSuggestionClick(
                     "Can you summarize the main objective and scope of this SOP?"
                   )
                 }
@@ -648,7 +749,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               </button>
               <button
                 onClick={() =>
-                  handleSuggestionClick( // 🔥 CHANGED
+                  handleSuggestionClick(
                     "What are the key safety precautions, warnings, or prerequisites mentioned?"
                   )
                 }
@@ -659,7 +760,7 @@ export default function ChatWithSOP({ sop, onClose }) {
               </button>
               <button
                 onClick={() =>
-                  handleSuggestionClick( // 🔥 CHANGED
+                  handleSuggestionClick(
                     "List the step-by-step instructions for the primary procedure."
                   )
                 }

@@ -16,7 +16,7 @@ import {
   Check,
   Trash2,
   ThumbsUp,
-  ThumbsDown, // 👈 Added new icons
+  ThumbsDown,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -30,9 +30,9 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeMedia, setActiveMedia] = useState(null);
-  const [copiedIndex, setCopiedIndex] = useState(null); // 👈 State for copy feedback
+  const [copiedIndex, setCopiedIndex] = useState(null);
   const bottomRef = useRef(null);
-  const textareaRef = useRef(null); // 👈 Ref for auto-resizing textarea
+  const textareaRef = useRef(null);
 
   // 🔥 RAG SERVICE STATUS
   const { rag } = useServiceStatus();
@@ -62,7 +62,6 @@ export default function ChatWithSOP({ sop, onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // 👈 Auto-resize textarea effect
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -74,15 +73,12 @@ export default function ChatWithSOP({ sop, onClose }) {
   }, [question]);
 
   // --- NEW FEATURES FUNCTIONS ---
-
-  // 👈 Copy function
   const handleCopy = (text, index) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000); // Reset icon after 2s
+    setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  // 👈 Clear chat function
   const handleClearChat = () => {
     if (
       window.confirm("Are you sure you want to clear the current chat view?")
@@ -160,7 +156,7 @@ export default function ChatWithSOP({ sop, onClose }) {
 
     if (!queryOverride) {
       setQuestion("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto"; // reset height
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
     setLoading(true);
 
@@ -269,7 +265,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                 </span>
               </div>
 
-              {/* 👈 Added Clear Chat Button */}
               {messages.length > 0 && (
                 <button
                   onClick={handleClearChat}
@@ -324,7 +319,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                       : "bg-slate-100 text-slate-800"
                   }`}
                 >
-                  {/* 👈 Added Copy Button for User messages (floats on hover) */}
                   {msg.role === "user" && (
                     <button
                       onClick={() => handleCopy(msg.content, i)}
@@ -409,7 +403,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                               if (isVideo) {
                                 return (
                                   <div
-                                    className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-lg shadow-sm relative group cursor-pointer"
+                                    // 👈 Reduced max-w-lg to max-w-sm
+                                    className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
                                     onClick={() => setActiveMedia(mediaObj)}
                                   >
                                     <div
@@ -418,7 +413,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                                     />
                                     <video
                                       src={src}
-                                      className="w-full max-h-[300px] object-contain bg-black"
+                                      // 👈 Reduced max-h-[300px] to max-h-[200px]
+                                      className="w-full max-h-[200px] object-contain bg-black"
                                     />
                                     <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
                                       <Maximize2
@@ -441,13 +437,15 @@ export default function ChatWithSOP({ sop, onClose }) {
 
                               return (
                                 <div
-                                  className="my-4 max-w-lg relative group cursor-pointer"
+                                  // 👈 Reduced max-w-lg to max-w-sm
+                                  className="my-4 max-w-sm relative group cursor-pointer"
                                   onClick={() => setActiveMedia(mediaObj)}
                                 >
                                   <img
                                     src={src}
                                     alt={alt}
-                                    className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[400px]"
+                                    // 👈 Reduced max-h-[400px] to max-h-[240px]
+                                    className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
                                   />
                                   <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
                                     <Maximize2
@@ -471,7 +469,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                           {msg.content}
                         </ReactMarkdown>
 
-                        {/* Fallback Media Gallery (Unchanged) */}
+                        {/* Fallback Media Gallery */}
                         {msg.media &&
                           (() => {
                             const unusedMedia = msg.media.filter(
@@ -484,7 +482,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                                 <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">
                                   Additional Resources
                                 </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* 👈 Changed grid-cols-1 sm:grid-cols-2 to grid-cols-2 sm:grid-cols-3 to make items smaller */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                   {unusedMedia.map((m, idx) => {
                                     const isVideo =
                                       m.type === "video" ||
@@ -529,7 +528,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                                             <img
                                               src={m.url}
                                               alt={m.caption || "SOP Reference"}
-                                              className="w-full h-40 object-cover group-hover:opacity-90 transition-opacity"
+                                              // 👈 Reduced h-40 to h-24
+                                              className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
                                             />
                                             <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
                                               <Maximize2
@@ -569,7 +569,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
                         )}
 
-                        {/* 👈 Added Action Bar (Copy & Feedback) for Assistant Messages */}
+                        {/* Action Bar */}
                         <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2">
                           <div className="text-xs text-slate-500">
                             {msg.source === "cache"
@@ -597,8 +597,8 @@ export default function ChatWithSOP({ sop, onClose }) {
                                 </>
                               )}
                             </button>
-                            <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                            <button
+                            {/* <div className="w-px h-3 bg-slate-300 mx-1"></div> */}
+                            {/* <button
                               className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
                               title="Helpful"
                             >
@@ -609,14 +609,13 @@ export default function ChatWithSOP({ sop, onClose }) {
                               title="Not Helpful"
                             >
                               <ThumbsDown className="w-3.5 h-3.5" />
-                            </button>
+                            </button> */}
                           </div>
                         </div>
                       </div>
                     )
                   ) : (
                     <>
-                      {/* Preserve newlines in user messages */}
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                       {msg.timestamp && (
                         <div className="mt-1 text-right text-[10px] opacity-80">
@@ -643,7 +642,7 @@ export default function ChatWithSOP({ sop, onClose }) {
           {/* Quick Suggestions */}
           <div className="border-t px-4 py-2 bg-white shrink-0">
             <div className="flex flex-wrap gap-2">
-            <div className="text-sm text-slate-500">Suggestions:</div>
+              <div className="text-sm text-slate-500">Suggestions:</div>
               <button
                 onClick={() =>
                   handleAsk(
@@ -690,14 +689,13 @@ export default function ChatWithSOP({ sop, onClose }) {
                   : "bg-slate-50 border-slate-200 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500"
               }`}
             >
-              {/* 👈 Swapped <input> to <textarea> for Shift+Enter multiline support */}
               <textarea
                 ref={textareaRef}
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault(); // Prevent default newline addition
+                    e.preventDefault();
                     handleAsk();
                   }
                 }}
@@ -711,7 +709,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                 rows={1}
               />
               <div className="flex items-center gap-2 pb-1">
-                {/* <Globe className="h-4 w-4 text-slate-400 hidden sm:block" /> */}
                 <button
                   onClick={() => handleAsk()}
                   disabled={loading || !question.trim() || isRagOffline}

@@ -1,12 +1,27 @@
 import { useState, useEffect, useRef } from "react";
-import { 
-  X, Send, Globe, HelpCircle, ArrowRight, CheckCircle, 
-  Sparkles, Image as ImageIcon, Video, Maximize2, Play, WifiOff 
+import {
+  X,
+  Send,
+  Globe,
+  HelpCircle,
+  ArrowRight,
+  CheckCircle,
+  Sparkles,
+  Image as ImageIcon,
+  Video,
+  Maximize2,
+  Play,
+  WifiOff,
+  Copy,
+  Check,
+  Trash2,
+  ThumbsUp,
+  ThumbsDown, // 👈 Added new icons
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MediaModal from "../components/MediaModal";
-import { useServiceStatus } from "../context/ServiceStatusContext"; // 👈 Add this import
+import { useServiceStatus } from "../context/ServiceStatusContext";
 
 export default function ChatWithSOP({ sop, onClose }) {
   // --- STATE & REFS ---
@@ -14,8 +29,10 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeMedia, setActiveMedia] = useState(null); 
+  const [activeMedia, setActiveMedia] = useState(null);
+  const [copiedIndex, setCopiedIndex] = useState(null); // 👈 State for copy feedback
   const bottomRef = useRef(null);
+  const textareaRef = useRef(null); // 👈 Ref for auto-resizing textarea
 
   // 🔥 RAG SERVICE STATUS
   const { rag } = useServiceStatus();
@@ -25,7 +42,10 @@ export default function ChatWithSOP({ sop, onClose }) {
 
   // --- DERIVED SOP ID ---
   const rawId = sop?.sopId || sop?._id || "unknown";
-  const safeDocumentId = rawId.toString().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+  const safeDocumentId = rawId
+    .toString()
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .toLowerCase();
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -42,43 +62,77 @@ export default function ChatWithSOP({ sop, onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  // 👈 Auto-resize textarea effect
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        120
+      )}px`;
+    }
+  }, [question]);
+
+  // --- NEW FEATURES FUNCTIONS ---
+
+  // 👈 Copy function
+  const handleCopy = (text, index) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000); // Reset icon after 2s
+  };
+
+  // 👈 Clear chat function
+  const handleClearChat = () => {
+    if (
+      window.confirm("Are you sure you want to clear the current chat view?")
+    ) {
+      setMessages([]);
+    }
+  };
+
   // --- API FUNCTIONS ---
   const fetchHistory = async (id) => {
     try {
-      const res = await fetch(`${API_URL}/user/history/${id}/${safeDocumentId}`);
+      const res = await fetch(
+        `${API_URL}/user/history/${id}/${safeDocumentId}`
+      );
       if (!res.ok) return;
       const data = await res.json();
-      
+
       if (data && data.length > 0) {
         const historyMessages = [];
         data.forEach((item) => {
-          const msgTime = item.timestamp ? new Date(item.timestamp) : new Date();
+          const msgTime = item.timestamp
+            ? new Date(item.timestamp)
+            : new Date();
 
-          historyMessages.push({ 
-            role: "user", 
+          historyMessages.push({
+            role: "user",
             content: item.question,
-            timestamp: msgTime
+            timestamp: msgTime,
           });
-          
+
           if (item.suggestions && item.suggestions.length > 0) {
             historyMessages.push({
               role: "assistant",
               type: "suggestions",
-              content: "I found similar questions in my memory. Did you mean one of these?",
+              content:
+                "I found similar questions in my memory. Did you mean one of these?",
               suggestions: item.suggestions,
               originalQuestion: item.question,
-              timestamp: msgTime
+              timestamp: msgTime,
             });
           } else {
-            historyMessages.push({ 
-              role: "assistant", 
-              type: "answer", 
-              content: item.answer, 
+            historyMessages.push({
+              role: "assistant",
+              type: "answer",
+              content: item.answer,
               source: item.source,
-              isApproved: item.is_approved,    
+              isApproved: item.is_approved,
               adminComment: item.admin_comment,
               media: item.media || [],
-              timestamp: msgTime 
+              timestamp: msgTime,
             });
           }
         });
@@ -90,19 +144,24 @@ export default function ChatWithSOP({ sop, onClose }) {
   };
 
   const handleAsk = async (queryOverride = null, skipCache = false) => {
-    if (isRagOffline) return; // Prevent asking if offline
-    
+    if (isRagOffline) return;
+
     const currentQuestion = queryOverride || question;
     if (!currentQuestion.trim()) return;
 
-    const displayQuestion = skipCache ? `Search anyway: "${currentQuestion}"` : currentQuestion;
+    const displayQuestion = skipCache
+      ? `Search anyway: "${currentQuestion}"`
+      : currentQuestion;
 
     setMessages((prev) => [
       ...prev,
       { role: "user", content: displayQuestion, timestamp: new Date() },
     ]);
 
-    if (!queryOverride) setQuestion("");
+    if (!queryOverride) {
+      setQuestion("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto"; // reset height
+    }
     setLoading(true);
 
     try {
@@ -128,12 +187,14 @@ export default function ChatWithSOP({ sop, onClose }) {
             content: data.message || "Did you mean one of these?",
             suggestions: data.data || [],
             originalQuestion: data.original_question || currentQuestion,
-            timestamp: new Date()
+            timestamp: new Date(),
           },
         ]);
       } else {
         let finalContent = (data.data || data.answer || "").trim();
-        if (!finalContent) finalContent = "⚠️ Sorry, I received an empty response from the server.";
+        if (!finalContent)
+          finalContent =
+            "⚠️ Sorry, I received an empty response from the server.";
 
         setMessages((prev) => [
           ...prev,
@@ -144,8 +205,8 @@ export default function ChatWithSOP({ sop, onClose }) {
             source: data.source || "rag",
             isApproved: data.is_approved || false,
             adminComment: data.admin_comment || "",
-            media: data.media || [], 
-            timestamp: new Date()
+            media: data.media || [],
+            timestamp: new Date(),
           },
         ]);
       }
@@ -157,7 +218,7 @@ export default function ChatWithSOP({ sop, onClose }) {
           role: "assistant",
           type: "answer",
           content: "❌ An error occurred while fetching the response.",
-          timestamp: new Date()
+          timestamp: new Date(),
         },
       ]);
     } finally {
@@ -167,43 +228,75 @@ export default function ChatWithSOP({ sop, onClose }) {
 
   const formatTime = (date) => {
     if (!date) return "";
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-        <div className="flex h-[90vh] w-[900px] flex-col rounded-2xl bg-white shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-          
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <div
+          className="flex h-[90vh] w-[900px] flex-col rounded-2xl bg-white shadow-xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="flex items-center justify-between bg-orange-50 px-6 py-4 border-b shrink-0">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500 text-white font-bold">✨</div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500 text-white font-bold">
+                ✨
+              </div>
               <div>
                 <h2 className="text-base font-semibold">Chat with SOP</h2>
-                <p className="text-sm text-slate-500">{sop?.sopId ?? "SOP"} · {sop?.title ?? "."}</p>
+                <p className="text-sm text-slate-500">
+                  {sop?.sopId ?? "SOP"} · {sop?.title ?? "."}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-               {/* Small indicator dot in header for service status */}
+              {/* Service Status Indicator */}
               <div className="flex items-center gap-2 text-xs font-medium bg-white px-2 py-1 rounded-md border shadow-sm">
-                <div className={`w-2 h-2 rounded-full ${isRagOffline ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-                <span className={isRagOffline ? 'text-slate-600' : 'text-slate-600'}>
-                  {isRagOffline ? 'RAG Disconnected' : 'RAG Connected'}
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    isRagOffline ? "bg-red-500" : "bg-emerald-500"
+                  }`}
+                ></div>
+                <span
+                  className={isRagOffline ? "text-slate-600" : "text-slate-600"}
+                >
+                  {isRagOffline ? "RAG Disconnected" : "RAG Connected"}
                 </span>
               </div>
-              <button onClick={onClose} className="rounded-lg p-2 hover:bg-orange-100 transition-colors">
+
+              {/* 👈 Added Clear Chat Button */}
+              {messages.length > 0 && (
+                <button
+                  onClick={handleClearChat}
+                  title="Clear Chat History"
+                  className="rounded-lg p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              )}
+
+              <button
+                onClick={onClose}
+                className="rounded-lg p-2 text-slate-500 hover:bg-orange-100 transition-colors"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
 
-          {/* 🔥 Service Down Alert Banner */}
+          {/* Service Down Alert Banner */}
           {isRagOffline && (
             <div className="bg-red-50 border-b border-red-200 px-6 py-3 shrink-0 flex items-center gap-3 text-red-700 text-sm">
               <WifiOff className="h-5 w-5 text-red-500 flex-shrink-0" />
               <p>
-                <strong>Connection Lost:</strong> The RAG AI Service is currently offline. You can view your chat history, but new questions cannot be answered right now.
+                <strong>Connection Lost:</strong> The RAG AI Service is
+                currently offline. You can view your chat history, but new
+                questions cannot be answered right now.
               </p>
             </div>
           )}
@@ -211,16 +304,41 @@ export default function ChatWithSOP({ sop, onClose }) {
           {/* Chat Area */}
           <div className="flex-1 overflow-y-auto bg-white px-6 py-6 space-y-6">
             {messages.length === 0 && !loading && (
-               <div className="text-center text-slate-400 mt-10">
-                 <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-20" />
-                 <p>Ask a question to start exploring this SOP.</p>
-               </div>
+              <div className="text-center text-slate-400 mt-10">
+                <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                <p>Ask a question to start exploring this SOP.</p>
+              </div>
             )}
 
             {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === "user" ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-800"}`}>
-                  
+              <div
+                key={i}
+                className={`flex ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                } group`}
+              >
+                <div
+                  className={`relative max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                    msg.role === "user"
+                      ? "bg-orange-500 text-white"
+                      : "bg-slate-100 text-slate-800"
+                  }`}
+                >
+                  {/* 👈 Added Copy Button for User messages (floats on hover) */}
+                  {msg.role === "user" && (
+                    <button
+                      onClick={() => handleCopy(msg.content, i)}
+                      className="absolute top-3 -left-10 p-1.5 text-slate-400 hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-sm rounded-md border"
+                      title="Copy question"
+                    >
+                      {copiedIndex === i ? (
+                        <Check className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
+
                   {msg.role === "assistant" ? (
                     msg.type === "suggestions" ? (
                       <div className="flex flex-col space-y-3">
@@ -240,7 +358,9 @@ export default function ChatWithSOP({ sop, onClose }) {
                             </button>
                           ))}
                           <button
-                            onClick={() => handleAsk(msg.originalQuestion, true)}
+                            onClick={() =>
+                              handleAsk(msg.originalQuestion, true)
+                            }
                             disabled={isRagOffline}
                             className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-200 text-slate-500 transition-colors mt-2 disabled:opacity-50"
                           >
@@ -254,89 +374,176 @@ export default function ChatWithSOP({ sop, onClose }) {
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc pl-5 space-y-2 mb-4">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal pl-5 space-y-2 mb-4">{children}</ol>,
+                            p: ({ children }) => (
+                              <p className="mb-4 last:mb-0 leading-relaxed">
+                                {children}
+                              </p>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="list-disc pl-5 space-y-2 mb-4">
+                                {children}
+                              </ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="list-decimal pl-5 space-y-2 mb-4">
+                                {children}
+                              </ol>
+                            ),
                             li: ({ children }) => <li>{children}</li>,
-                            strong: ({ children }) => <strong className="font-semibold text-slate-800">{children}</strong>,
+                            strong: ({ children }) => (
+                              <strong className="font-semibold text-slate-800">
+                                {children}
+                              </strong>
+                            ),
                             img: ({ src, alt }) => {
-                              // Self-hosted media check
-                              const isVideo = alt === 'VIDEO' || src.match(/\.(mp4|webm|ogg)$/i) || src.includes('.mp4');
-                              const mediaObj = { url: src, caption: alt, type: isVideo ? 'video' : 'image' };
-                              
+                              const isVideo =
+                                alt === "VIDEO" ||
+                                src.match(/\.(mp4|webm|ogg)$/i) ||
+                                src.includes(".mp4");
+                              const mediaObj = {
+                                url: src,
+                                caption: alt,
+                                type: isVideo ? "video" : "image",
+                              };
+
                               if (isVideo) {
                                 return (
-                                  <div className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-lg shadow-sm relative group cursor-pointer" onClick={() => setActiveMedia(mediaObj)}>
-                                    <div className="absolute inset-0 z-10 bg-transparent" title="Click to expand" />
-                                    <video src={src} className="w-full max-h-[300px] object-contain bg-black" />
+                                  <div
+                                    className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-lg shadow-sm relative group cursor-pointer"
+                                    onClick={() => setActiveMedia(mediaObj)}
+                                  >
+                                    <div
+                                      className="absolute inset-0 z-10 bg-transparent"
+                                      title="Click to expand"
+                                    />
+                                    <video
+                                      src={src}
+                                      className="w-full max-h-[300px] object-contain bg-black"
+                                    />
                                     <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                      <Maximize2 size={14} className="text-white" />
+                                      <Maximize2
+                                        size={14}
+                                        className="text-white"
+                                      />
                                     </div>
                                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                                       <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                                        <Play fill="currentColor" size={20} className="ml-0.5" />
+                                        <Play
+                                          fill="currentColor"
+                                          size={20}
+                                          className="ml-0.5"
+                                        />
                                       </div>
                                     </div>
                                   </div>
                                 );
                               }
-                              
+
                               return (
-                                <div className="my-4 max-w-lg relative group cursor-pointer" onClick={() => setActiveMedia(mediaObj)}>
-                                  <img src={src} alt={alt} className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[400px]" />
+                                <div
+                                  className="my-4 max-w-lg relative group cursor-pointer"
+                                  onClick={() => setActiveMedia(mediaObj)}
+                                >
+                                  <img
+                                    src={src}
+                                    alt={alt}
+                                    className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[400px]"
+                                  />
                                   <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                    <Maximize2 size={14} className="text-white" />
+                                    <Maximize2
+                                      size={14}
+                                      className="text-white"
+                                    />
                                   </div>
-                                  {alt && alt !== 'image' && alt !== 'Image' && alt !== 'None' && (
-                                    <div className="mt-1.5 text-xs text-slate-500 text-center italic">{alt}</div>
-                                  )}
+                                  {alt &&
+                                    alt !== "image" &&
+                                    alt !== "Image" &&
+                                    alt !== "None" && (
+                                      <div className="mt-1.5 text-xs text-slate-500 text-center italic">
+                                        {alt}
+                                      </div>
+                                    )}
                                 </div>
                               );
-                            }
+                            },
                           }}
                         >
                           {msg.content}
                         </ReactMarkdown>
 
-                        {/* --- FALLBACK MEDIA GALLERY --- */}
-                        {msg.media && (
+                        {/* Fallback Media Gallery (Unchanged) */}
+                        {msg.media &&
                           (() => {
-                            const unusedMedia = msg.media.filter(m => !msg.content.includes(m.url));
+                            const unusedMedia = msg.media.filter(
+                              (m) => !msg.content.includes(m.url)
+                            );
                             if (unusedMedia.length === 0) return null;
 
                             return (
                               <div className="mt-4 border-t border-slate-200 pt-3">
-                                <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Additional Resources</p>
+                                <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">
+                                  Additional Resources
+                                </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   {unusedMedia.map((m, idx) => {
-                                    const isVideo = m.type === 'video' || m.url.match(/\.(mp4|webm|ogg)$/i);
-                                    
+                                    const isVideo =
+                                      m.type === "video" ||
+                                      m.url.match(/\.(mp4|webm|ogg)$/i);
+
                                     return (
-                                      <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col">
+                                      <div
+                                        key={idx}
+                                        className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col"
+                                      >
                                         {isVideo ? (
-                                          <div className="relative pt-[56.25%] bg-black group cursor-pointer" onClick={() => setActiveMedia(m)}>
+                                          <div
+                                            className="relative pt-[56.25%] bg-black group cursor-pointer"
+                                            onClick={() => setActiveMedia(m)}
+                                          >
                                             <div className="absolute inset-0 bg-transparent z-10" />
-                                            <video src={m.url} className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                                            <video
+                                              src={m.url}
+                                              className="absolute inset-0 w-full h-full object-cover opacity-80"
+                                            />
                                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                                               <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                                                <Play fill="currentColor" size={14} className="ml-0.5" />
+                                                <Play
+                                                  fill="currentColor"
+                                                  size={14}
+                                                  className="ml-0.5"
+                                                />
                                               </div>
                                             </div>
                                             <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                              <Maximize2 size={14} className="text-white" />
+                                              <Maximize2
+                                                size={14}
+                                                className="text-white"
+                                              />
                                             </div>
                                           </div>
                                         ) : (
-                                          <div className="relative group cursor-pointer" onClick={() => setActiveMedia(m)}>
-                                            <img src={m.url} alt={m.caption || 'SOP Reference'} className="w-full h-40 object-cover group-hover:opacity-90 transition-opacity" />
+                                          <div
+                                            className="relative group cursor-pointer"
+                                            onClick={() => setActiveMedia(m)}
+                                          >
+                                            <img
+                                              src={m.url}
+                                              alt={m.caption || "SOP Reference"}
+                                              className="w-full h-40 object-cover group-hover:opacity-90 transition-opacity"
+                                            />
                                             <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                              <Maximize2 size={14} className="text-white" />
+                                              <Maximize2
+                                                size={14}
+                                                className="text-white"
+                                              />
                                             </div>
                                           </div>
                                         )}
-                                        {m.caption && m.caption !== 'None' && (
+                                        {m.caption && m.caption !== "None" && (
                                           <div className="p-2 text-xs text-slate-600 bg-slate-50 flex-1 border-t border-slate-100 flex justify-between items-center">
-                                            <span className="truncate mr-2">{m.caption}</span>
+                                            <span className="truncate mr-2">
+                                              {m.caption}
+                                            </span>
                                           </div>
                                         )}
                                       </div>
@@ -345,32 +552,72 @@ export default function ChatWithSOP({ sop, onClose }) {
                                 </div>
                               </div>
                             );
-                          })()
-                        )}
+                          })()}
 
                         {msg.isApproved && (
                           <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-800 flex flex-col gap-1.5">
                             <div className="flex items-center gap-1.5 font-semibold">
-                              <CheckCircle className="w-4 h-4 text-emerald-600" /> Verified by Expert
+                              <CheckCircle className="w-4 h-4 text-emerald-600" />{" "}
+                              Verified by Expert
                             </div>
                             {msg.adminComment && (
                               <p className="text-emerald-700 mt-1">
-                                <span className="font-medium">Admin Note:</span> {msg.adminComment}
+                                <span className="font-medium">Admin Note:</span>{" "}
+                                {msg.adminComment}
                               </p>
                             )}
                           </div>
                         )}
 
+                        {/* 👈 Added Action Bar (Copy & Feedback) for Assistant Messages */}
                         <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2">
                           <div className="text-xs text-slate-500">
-                            {msg.source === "cache" ? "⚡ Answered from Cache" : ""}
+                            {msg.source === "cache"
+                              ? "⚡ Answered from Cache"
+                              : ""}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleCopy(msg.content, i)}
+                              className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded transition-colors flex items-center gap-1"
+                              title="Copy answer"
+                            >
+                              {copiedIndex === i ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />{" "}
+                                  <span className="text-[10px] text-emerald-500 font-medium">
+                                    Copied
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />{" "}
+                                  <span className="text-[10px]">Copy</span>
+                                </>
+                              )}
+                            </button>
+                            <div className="w-px h-3 bg-slate-300 mx-1"></div>
+                            <button
+                              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                              title="Helpful"
+                            >
+                              <ThumbsUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Not Helpful"
+                            >
+                              <ThumbsDown className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       </div>
                     )
                   ) : (
                     <>
-                      <p>{msg.content}</p>
+                      {/* Preserve newlines in user messages */}
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
                       {msg.timestamp && (
                         <div className="mt-1 text-right text-[10px] opacity-80">
                           {formatTime(msg.timestamp)}
@@ -389,64 +636,105 @@ export default function ChatWithSOP({ sop, onClose }) {
                 </div>
               </div>
             )}
-            
+
             <div ref={bottomRef} />
           </div>
 
           {/* Quick Suggestions */}
-          <div className="border-t px-6 py-3 bg-white shrink-0">
-            <div className="mb-2 text-sm text-slate-500">Suggestions:</div>
+          <div className="border-t px-4 py-2 bg-white shrink-0">
             <div className="flex flex-wrap gap-2">
-              <button 
-                onClick={() => handleAsk("give all points of Monthly Preventive Maintenance.")} 
+            <div className="text-sm text-slate-500">Suggestions:</div>
+              <button
+                onClick={() =>
+                  handleAsk(
+                    "Can you summarize the main objective and scope of this SOP?"
+                  )
+                }
                 disabled={isRagOffline}
-                className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
+                className="bg-orange-100 rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
               >
-                give all points of Monthly Preventive Maintenance.
+                Summarize the main objective
               </button>
-              <button 
-                onClick={() => handleAsk("How do I check the turret for free rotation?")} 
+              <button
+                onClick={() =>
+                  handleAsk(
+                    "What are the key safety precautions, warnings, or prerequisites mentioned?"
+                  )
+                }
                 disabled={isRagOffline}
-                className="rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
+                className="bg-orange-100 rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
               >
-                How do I check the turret for free rotation?
+                Key safety precautions & warnings
+              </button>
+              <button
+                onClick={() =>
+                  handleAsk(
+                    "List the step-by-step instructions for the primary procedure."
+                  )
+                }
+                disabled={isRagOffline}
+                className="bg-orange-100 rounded-full border px-3 py-1 text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:hover:bg-white"
+              >
+                Step-by-step instructions
               </button>
             </div>
           </div>
 
           {/* Input Area */}
           <div className="border-t px-6 py-4 bg-white shrink-0">
-            <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all
-              ${isRagOffline 
-                ? 'bg-slate-100 border-slate-200 opacity-70' 
-                : 'bg-slate-50 border-slate-200 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500'}`}
+            <div
+              className={`flex items-end gap-2 rounded-xl border px-3 py-2 transition-all
+              ${
+                isRagOffline
+                  ? "bg-slate-100 border-slate-200 opacity-70"
+                  : "bg-slate-50 border-slate-200 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500"
+              }`}
             >
-              <input
+              {/* 👈 Swapped <input> to <textarea> for Shift+Enter multiline support */}
+              <textarea
+                ref={textareaRef}
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAsk()}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
-                placeholder={isRagOffline ? "Service disconnected..." : `Ask about ${sop?.id ?? "this SOP"}...`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault(); // Prevent default newline addition
+                    handleAsk();
+                  }
+                }}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400 disabled:cursor-not-allowed resize-none overflow-y-auto py-1.5"
+                placeholder={
+                  isRagOffline
+                    ? "Service disconnected..."
+                    : `Ask about ${sop?.id ?? "this SOP"}...`
+                }
                 disabled={loading || isRagOffline}
+                rows={1}
               />
-              <Globe className="h-4 w-4 text-slate-400" />
-              <button 
-                onClick={() => handleAsk()}
-                disabled={loading || !question.trim() || isRagOffline}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors disabled:cursor-not-allowed"
-              >
-                <Send className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2 pb-1">
+                {/* <Globe className="h-4 w-4 text-slate-400 hidden sm:block" /> */}
+                <button
+                  onClick={() => handleAsk()}
+                  disabled={loading || !question.trim() || isRagOffline}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors disabled:cursor-not-allowed shrink-0"
+                >
+                  <Send className="h-3 w-3" />
+                </button>
+              </div>
             </div>
             <p className="mt-2 text-xs text-slate-400 text-center">
-              {isRagOffline ? "Chat is unavailable while service is offline." : "Press Enter to send, Shift+Enter for new line"}
+              {isRagOffline
+                ? "Chat is unavailable while service is offline."
+                : "Press Enter to send, Shift+Enter for new line"}
             </p>
           </div>
         </div>
       </div>
 
       {/* Media Overlay Modal */}
-      <MediaModal mediaItem={activeMedia} onClose={() => setActiveMedia(null)} />
+      <MediaModal
+        mediaItem={activeMedia}
+        onClose={() => setActiveMedia(null)}
+      />
     </>
   );
 }

@@ -59,7 +59,7 @@ export default function BackendService() {
     (safeMetrics.memory.heapUsed / safeMetrics.memory.heapTotal) * 100 : 0;
 
   return (
-    <div className="space-y-6 text-left bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm">
+    <div className="space-y-6 text-left bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-[0_2px_8px_rgba(255,165,0,0.4)]">
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
         <div>

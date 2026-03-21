@@ -28,6 +28,7 @@ export default function Login() {
         // Store JWT and role in sessionStorage
         sessionStorage.setItem("token", data.token);
         sessionStorage.setItem("role", data.role);
+        sessionStorage.setItem("sop_user_id", data.userid);
         window.dispatchEvent(new Event("tokenUpdated"));
 
         navigate("/"); // Redirect to dashboard

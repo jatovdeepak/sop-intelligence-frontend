@@ -62,7 +62,7 @@ export default function MediaEditor({ nodeId, media = [], onUpdate }) {
     formData.append('file', file);
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',

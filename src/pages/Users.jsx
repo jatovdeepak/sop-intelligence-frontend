@@ -19,7 +19,7 @@ export default function Users() {
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("token"); 
+      const token = sessionStorage.getItem("token"); 
       
       const response = await fetch(`${API_URL}/api/users`, {
         headers: {
@@ -49,7 +49,7 @@ export default function Users() {
     if (!window.confirm("Are you sure you want to delete this user?")) return;
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const response = await fetch(`${API_URL}/api/users/${userId}`, {
         method: "DELETE",
         headers: {

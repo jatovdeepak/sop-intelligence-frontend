@@ -49,7 +49,7 @@ export default function BuildRag({ sop, onClose }) {
 
         // --- STEP 2: Update MongoDB via Node.js Backend ---
         try {
-          const token = localStorage.getItem("token");
+          const token = sessionStorage.getItem("token");
           const dbUpdateResponse = await fetch(`${API_URL}/api/sops/${sop._id}`, {
             method: "PUT", 
             headers: {

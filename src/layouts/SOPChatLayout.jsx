@@ -72,7 +72,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   // Pull the freshest data when Extractor or RAG closes
   const handleUpdateClose = async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/sops/${localSop._id || localSop.sopId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });

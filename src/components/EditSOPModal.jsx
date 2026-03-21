@@ -25,7 +25,7 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
   useEffect(() => {
     const fetchAvailableSOPs = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(`${API_URL}/api/sops`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -126,7 +126,7 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
         pdfPathBase64: pdfbase64 
       };
 
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       // STEP 3: Send as application/json to main API
       const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {

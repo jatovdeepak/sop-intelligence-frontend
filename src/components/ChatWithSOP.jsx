@@ -56,16 +56,16 @@ export default function ChatWithSOP({ sop, onClose }) {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    let storedId = localStorage.getItem("sop_user_id");
+    let storedId = sessionStorage.getItem("sop_user_id");
     if (!storedId) {
       storedId = "user_" + Math.random().toString(36).substring(2, 9);
-      localStorage.setItem("sop_user_id", storedId);
+      sessionStorage.setItem("sop_user_id", storedId);
     }
     setUserId(storedId);
     fetchHistory(storedId);
 
     // 🔥 NEW: Check for Admin Role in Local Storage
-    const userRole = localStorage.getItem("role");
+    const userRole = sessionStorage.getItem("role");
     setIsAdmin(userRole === "Admin");
   }, []);
 

@@ -13,14 +13,14 @@ export default function SessionTimeout() {
 
   // Sync token when route changes
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
+    const storedToken = sessionStorage.getItem("token");
     setToken(storedToken);
   }, [location]);
 
   // Listen for login token updates
   useEffect(() => {
     const updateToken = () => {
-      const newToken = localStorage.getItem("token");
+      const newToken = sessionStorage.getItem("token");
       setToken(newToken);
     };
 
@@ -43,8 +43,8 @@ export default function SessionTimeout() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("role");
     setShowWarning(false);
     navigate("/login");
   };
@@ -66,7 +66,7 @@ export default function SessionTimeout() {
 
       const data = await res.json();
 
-      localStorage.setItem("token", data.token);
+      sessionStorage.setItem("token", data.token);
       window.dispatchEvent(new Event("tokenUpdated"));
 
       setShowWarning(false);

@@ -31,9 +31,9 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [userRole, setUserRole] = useState(null);
 
-  // Fetch the user's role from localStorage when the sidebar mounts
+  // Fetch the user's role from sessionStorage when the sidebar mounts
   useEffect(() => {
-    const role = localStorage.getItem("role");
+    const role = sessionStorage.getItem("role");
     setUserRole(role);
   }, []);
 

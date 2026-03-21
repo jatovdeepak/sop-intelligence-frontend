@@ -47,7 +47,7 @@ export default function SOPFlowchartLayout({ sop, onClose, onRefresh }) {
   // 3. Function to pull the freshest data from your DB when the extractor closes
   const handleExtractorClose = async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/sops/${localSop._id || localSop.sopId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });

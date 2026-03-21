@@ -25,9 +25,9 @@ export default function Login() {
       const data = await response.json();
 
       if (response.ok) {
-        // Store JWT and role in localStorage
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("role", data.role);
+        // Store JWT and role in sessionStorage
+        sessionStorage.setItem("token", data.token);
+        sessionStorage.setItem("role", data.role);
         window.dispatchEvent(new Event("tokenUpdated"));
 
         navigate("/"); // Redirect to dashboard

@@ -16,10 +16,10 @@ export default function SOPIntelligenceUser() {
 
   // 👈 NEW: Initialize User ID and fetch history on mount
   useEffect(() => {
-    let storedId = localStorage.getItem("sop_user_id");
+    let storedId = sessionStorage.getItem("sop_user_id");
     if (!storedId) {
       storedId = "user_" + Math.random().toString(36).substring(2, 9);
-      localStorage.setItem("sop_user_id", storedId);
+      sessionStorage.setItem("sop_user_id", storedId);
     }
     setUserId(storedId);
     fetchHistory(storedId);

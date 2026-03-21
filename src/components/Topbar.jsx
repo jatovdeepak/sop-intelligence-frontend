@@ -2,16 +2,16 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Topbar() {
-  // Initialize role directly from localStorage
+  // Initialize role directly from sessionStorage
   const [userRole] = useState(() => {
-    return localStorage.getItem("role") || "User";
+    return sessionStorage.getItem("role") || "User";
   });
 
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("role");
     navigate("/login");
   };
 

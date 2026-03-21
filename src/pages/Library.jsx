@@ -42,7 +42,7 @@ export default function Library() {
   const fetchSOPs = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const response = await fetch(`${API_URL}/api/sops`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -75,7 +75,7 @@ export default function Library() {
     )
       return;
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const response = await fetch(`${API_URL}/api/sops/${id}`, {
         method: "DELETE",
         headers: {

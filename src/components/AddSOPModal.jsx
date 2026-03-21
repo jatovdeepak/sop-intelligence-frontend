@@ -25,7 +25,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
   useEffect(() => {
     const fetchAvailableSOPs = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(`${API_URL}/api/sops`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -123,7 +123,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
         pdfPathBase64: pdfbase64
       };
 
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       const response = await fetch(`${API_URL}/api/sops`, {
         method: "POST",

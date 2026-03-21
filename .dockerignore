@@ -1,0 +1,9 @@
+# Node modules and build folders
+node_modules/
+dist/
+build/
+npm-debug.log
+
+# Git and secrets
+.git/
+.env

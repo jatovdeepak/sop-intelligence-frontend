@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Database, FileJson, ArrowRight, CheckCircle2 } from "lucide-react";
+import { X, Database, FileJson, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import ChatWithSOP from "../components/ChatWithSOP";
 import DataExtractor from "../sop-data-extractor/DataExtractor";
 import BuildRag from "../components/BuildRag";
@@ -8,6 +8,17 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   const [localSop, setLocalSop] = useState(sop);
+
+  // 1. Determine if we are still waiting for the real data to arrive from the API
+  const [isLoading, setIsLoading] = useState(!sop || (!sop._id && !sop.sopId));
+
+  // 2. Sync late-arriving prop data and turn off loading state
+  useEffect(() => {
+    if (sop && (sop._id || sop.sopId)) {
+      setLocalSop(sop);
+      setIsLoading(false);
+    }
+  }, [sop]);
 
   const checkIsDataEmpty = (dataToCheck) => {
     if (!dataToCheck) return true;
@@ -37,12 +48,26 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   const ragTime = new Date(localSop?.lastRagBuildTime || 0).getTime();
   const needsRebuild = extractedTime > ragTime;
 
-  // Initialize view based on data and timestamps
+  // 3. Start with a "loading" view if data isn't here yet
   const [view, setView] = useState(() => {
+    if (isLoading) return "loading";
     if (isDataEmpty) return "setup";
-    if (needsRebuild || !isRagReady) return "rag"; // Auto-open RAG modal if out of date!
+    if (needsRebuild || !isRagReady) return "rag";
     return "chat";
   });
+
+  // 4. Once loading is done (or data changes), route to the correct view automatically
+  useEffect(() => {
+    if (!isLoading) {
+      if (isDataEmpty) {
+        setView(prev => (prev === "extractor" ? "extractor" : "setup"));
+      } else if (needsRebuild || !isRagReady) {
+        setView(prev => (prev === "extractor" || prev === "rag" ? prev : "rag"));
+      } else {
+        setView("chat");
+      }
+    }
+  }, [isLoading, isDataEmpty, needsRebuild, isRagReady]);
 
   // Pull the freshest data when Extractor or RAG closes
   const handleUpdateClose = async () => {
@@ -55,21 +80,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
       if (res.ok) {
         const updatedSop = await res.json();
         setLocalSop(updatedSop); 
-        
-        const stillEmpty = checkIsDataEmpty(updatedSop.data);
-        const newExtracted = new Date(updatedSop.lastExtractedTime || 0).getTime();
-        const newRag = new Date(updatedSop.lastRagBuildTime || 0).getTime();
-        const stillNeedsRebuild = newExtracted > newRag;
-        const nowRagReady = updatedSop.embeddingStatus === "completed";
-        
-        // Decide next step automatically
-        if (stillEmpty) {
-          setView("setup"); 
-        } else if (stillNeedsRebuild || !nowRagReady) {
-          setView("rag"); // Auto-trigger Build if it failed or isn't done
-        } else {
-          setView("chat"); // Success! Launch chat.
-        }
+        // Note: The useEffect above will handle moving the user to the correct view!
       } else {
         setView("setup");
       }
@@ -82,6 +93,19 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   };
 
   // --- RENDER VIEWS ---
+
+  // 5. Render Loading Screen while waiting for API
+  if (isLoading || view === "loading") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+        <div className="flex flex-col items-center justify-center bg-white p-8 rounded-2xl shadow-xl min-w-[300px]" onClick={e => e.stopPropagation()}>
+          <Loader2 className="h-10 w-10 text-orange-500 animate-spin mb-4" />
+          <h2 className="text-lg font-semibold text-slate-800">Loading SOP...</h2>
+          <p className="text-sm text-slate-500 mt-1">Fetching latest data</p>
+        </div>
+      </div>
+    );
+  }
 
   if (view === "extractor") {
     return (

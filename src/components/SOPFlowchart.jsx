@@ -77,7 +77,7 @@ const NODE_WIDTH = 320;
 
 // Helper to determine dynamic node height based on content
 const getNodeHeight = (node) => {
-  if (node.type === 'mainNode') return 180;
+  if (node.type === 'mainNode') return 280;
   if (node.type === 'refNode') return 140;
   
   if (node.type === 'stepNode') {

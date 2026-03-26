@@ -14,7 +14,7 @@ import {
   ThumbsUp,
   FileText,
   ChevronDown,
-  RefreshCw // <-- Added for the Clear Cache button
+  RefreshCw 
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -179,14 +179,13 @@ export default function SOPIntelligence() {
     }
   };
 
-  // 🌟 NEW: Clear Cache Function (Admin Only)
   const handleClearCache = async () => {
     if (!embeddingId || embeddingId === "global") {
       alert("Please select a specific SOP to clear its cache.");
       return;
     }
     
-    if (!window.confirm(`Are you sure you want to clear the AI cache for ${embeddingId}? This will remove all verified answers and speed optimizations for this document globally.`)) return;
+    if (!window.confirm(`Are you sure you want to clear the AI cache for this document? This will remove all verified answers and speed optimizations globally.`)) return;
     
     try {
       const res = await fetch(`${API_RAG_URL}/admin/clear-cache/${embeddingId}`, { 
@@ -194,7 +193,7 @@ export default function SOPIntelligence() {
       });
       
       if (res.ok) {
-        alert(`Cache for ${embeddingId} cleared successfully.`);
+        alert(`Cache cleared successfully.`);
       } else {
         alert("Failed to clear cache. You may not have the required permissions.");
       }
@@ -224,7 +223,6 @@ export default function SOPIntelligence() {
       ? `Search anyway: "${currentQuestion}"`
       : currentQuestion;
 
-    // Only add user message to chat UI if we aren't silently auto-switching in the background
     if (!targetSopOverride) {
       setMessages((prev) => [
         ...prev,
@@ -245,9 +243,9 @@ export default function SOPIntelligence() {
       // GLOBAL ROUTER MODE
       // ==========================================
       if (currentTarget === "global") {
-        // Send a lightweight catalog mapping of your MongoDB data to the LLM
+        // Send a lightweight catalog mapping using embeddingId as the strict 'id'
         const sopCatalogForLLM = availableSops.map(s => ({
-          id: s.embeddingId || s.sopId,
+          id: s.embeddingId, // The RAG API needs this ID to retrieve the document
           sopId: s.sopId,
           title: s.title,
           type: s.type
@@ -264,20 +262,30 @@ export default function SOPIntelligence() {
 
         const data = await res.json();
 
-        // 1. If LLM found an exact SOP match based on the query, auto-switch to it!
+        // 1. If LLM found an exact SOP match based on the query, auto-switch to it
         if (data.intent === "auto_select" && data.auto_select_id) {
-          setEmbeddingId(data.auto_select_id);
           
-          const matchedSop = availableSops.find(s => s.embeddingId === data.auto_select_id || s.sopId === data.auto_select_id);
-          const sopName = matchedSop ? matchedSop.sopId : data.auto_select_id;
+          // Look up the matching SOP in your state (checking both sopId and embeddingId just in case)
+          const matchedSop = availableSops.find(
+            s => s.sopId === data.auto_select_id || s.embeddingId === data.auto_select_id
+          );
 
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", type: "answer", content: `*Detected intent for **${sopName}**. Automatically switching context to answer your question...*` }
-          ]);
-          
-          // Recursively call handleAsk to fire the query at the specific SOP document
-          return handleAsk(currentQuestion, skipCache, data.auto_select_id);
+          if (matchedSop) {
+            // Extract the strict embeddingId needed for the next RAG query
+            const actualEmbeddingId = matchedSop.embeddingId;
+            const sopName = matchedSop.sopId || "the requested document";
+
+            // Update the UI state
+            setEmbeddingId(actualEmbeddingId);
+
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", type: "answer", content: `*Detected intent for **${sopName}**. Automatically switching context to answer your question...*` }
+            ]);
+            
+            // Recursively call handleAsk with the STRICT embeddingId
+            return handleAsk(currentQuestion, skipCache, actualEmbeddingId);
+          }
         }
 
         // 2. If it's just a greeting, a request to list SOPs, or unknown
@@ -286,7 +294,7 @@ export default function SOPIntelligence() {
           { role: "assistant", type: "answer", content: data.message, originalQuestion: currentQuestion }
         ]);
 
-        // 3. Append loose suggestions if any exist
+        // 3. Append loose suggestions if any exist, translating them to UI readable format
         if (data.suggested_ids && data.suggested_ids.length > 0) {
           setMessages((prev) => [
             ...prev,
@@ -295,15 +303,15 @@ export default function SOPIntelligence() {
               type: "suggestions", 
               content: "I'm not 100% sure, but these SOPs might contain what you need:", 
               suggestions: data.suggested_ids.map(id => {
-                const match = availableSops.find(s => s.embeddingId === id || s.sopId === id);
-                return match ? match.sopId : id;
+                const match = availableSops.find(s => s.embeddingId === id);
+                return match ? match.sopId : "Unknown Document";
               }), 
               originalQuestion: currentQuestion 
             }
           ]);
         }
         setLoading(false);
-        return; // Exit here, global logic is complete
+        return; 
       }
 
       // ==========================================
@@ -314,7 +322,7 @@ export default function SOPIntelligence() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          document_id: currentTarget,
+          document_id: currentTarget, // This explicitly passes the embeddingId to the API
           question: currentQuestion,
           skip_cache: skipCache,
         }),
@@ -401,11 +409,11 @@ export default function SOPIntelligence() {
     }
   };
 
-  // Helper to find selected SOP title for the header
+  // Helper to find selected SOP title for the header using the embeddingId
   const getSelectedSopTitle = () => {
     if (embeddingId === "global") return "🌍 Global AI Assistant";
-    const selected = availableSops.find(s => s.embeddingId === embeddingId || s.sopId === embeddingId);
-    return selected ? `${selected.sopId} ${selected.title ? `- ${selected.title}` : ""}` : embeddingId;
+    const selected = availableSops.find(s => s.embeddingId === embeddingId);
+    return selected ? `${selected.sopId} ${selected.title ? `- ${selected.title}` : ""}` : "Document";
   };
 
   /* ───────────────── LANDING PAGE ───────────────── */
@@ -431,8 +439,6 @@ export default function SOPIntelligence() {
                 onChange={(e) => {
                   const selectedId = e.target.value;
                   setEmbeddingId(selectedId);
-                  // Only open chat automatically if they pick a specific SOP.
-                  // If they select Global, let them type first.
                   if (selectedId && selectedId !== "global") {
                     setChatMode(true);
                   }
@@ -442,7 +448,8 @@ export default function SOPIntelligence() {
               >
                 <option value="global">🌍 Global AI Assistant (Ask anything)</option>
                 {availableSops.map((sop) => (
-                  <option key={sop._id} value={sop.embeddingId || sop.sopId}>
+                  // Use embeddingId strictly as the option value, but display the human-readable SOP ID
+                  <option key={sop._id || sop.embeddingId} value={sop.embeddingId}>
                     {sop.sopId} {sop.title ? `- ${sop.title}` : ""}
                   </option>
                 ))}
@@ -507,7 +514,6 @@ export default function SOPIntelligence() {
               Reset Chat
             </button>
 
-            {/* 🌟 NEW: Clear Cache Button - Admin Only & Only on Specific SOPs */}
             {isAdmin && embeddingId !== "global" && (
               <button 
                 onClick={handleClearCache}

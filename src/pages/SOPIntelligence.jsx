@@ -13,7 +13,8 @@ import {
   Play,
   ThumbsUp,
   FileText,
-  ChevronDown
+  ChevronDown,
+  RefreshCw // <-- Added for the Clear Cache button
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -23,7 +24,7 @@ import { useServiceStatus } from "../context/ServiceStatusContext";
 export default function SOPIntelligence() {
   // --- STATE & REFS ---
   const [userId, setUserId] = useState("");
-  const [embeddingId, setEmbeddingId] = useState(""); 
+  const [embeddingId, setEmbeddingId] = useState("global"); // Default to global mode
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -93,8 +94,14 @@ export default function SOPIntelligence() {
 
   // Fetch history when entering chat mode or changing embedding ID
   useEffect(() => {
-    if (chatMode && embeddingId) {
+    if (chatMode && embeddingId && embeddingId !== "global") {
       fetchHistory(userId, embeddingId);
+    } else if (embeddingId === "global" && messages.length === 0) {
+      setMessages([{
+        role: "assistant", 
+        type: "answer", 
+        content: "Hi! I am your Global SOP Assistant. You can say 'hi', ask me to list available SOPs, or ask a specific question and I'll route it to the right document."
+      }]);
     }
   }, [chatMode, embeddingId, userId]);
 
@@ -161,23 +168,52 @@ export default function SOPIntelligence() {
   };
 
   const handleClearHistory = async () => {
-    if (!window.confirm("Are you sure you want to clear your chat history for all SOPs?")) return;
+    if (!window.confirm("Are you sure you want to clear your personal chat history for all SOPs?")) return;
     try {
       await fetch(`${API_RAG_URL}/user/clear-history/${userId}`, { method: "POST" });
       setMessages([]);
       setChatMode(false);
+      setEmbeddingId("global");
     } catch (err) {
       console.error("Failed to clear history:", err);
     }
   };
 
-  const handleAsk = async (queryOverride = null, skipCache = false) => {
+  // 🌟 NEW: Clear Cache Function (Admin Only)
+  const handleClearCache = async () => {
+    if (!embeddingId || embeddingId === "global") {
+      alert("Please select a specific SOP to clear its cache.");
+      return;
+    }
+    
+    if (!window.confirm(`Are you sure you want to clear the AI cache for ${embeddingId}? This will remove all verified answers and speed optimizations for this document globally.`)) return;
+    
+    try {
+      const res = await fetch(`${API_RAG_URL}/admin/clear-cache/${embeddingId}`, { 
+        method: "POST" 
+      });
+      
+      if (res.ok) {
+        alert(`Cache for ${embeddingId} cleared successfully.`);
+      } else {
+        alert("Failed to clear cache. You may not have the required permissions.");
+      }
+    } catch (err) {
+      console.error("Failed to clear cache:", err);
+      alert("An error occurred while communicating with the server to clear the cache.");
+    }
+  };
+
+  const handleAsk = async (queryOverride = null, skipCache = false, targetSopOverride = null) => {
     if (isRagOffline) return;
 
     const currentQuestion = queryOverride || question;
     if (!currentQuestion.trim()) return;
 
-    if (!embeddingId) {
+    // Use override if auto-switching from global, otherwise use current dropdown state
+    const currentTarget = targetSopOverride || embeddingId;
+
+    if (!currentTarget) {
       alert("Please select an SOP to chat with.");
       return;
     }
@@ -188,10 +224,13 @@ export default function SOPIntelligence() {
       ? `Search anyway: "${currentQuestion}"`
       : currentQuestion;
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: displayQuestion },
-    ]);
+    // Only add user message to chat UI if we aren't silently auto-switching in the background
+    if (!targetSopOverride) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: displayQuestion },
+      ]);
+    }
 
     if (!queryOverride) {
       setQuestion("");
@@ -202,12 +241,80 @@ export default function SOPIntelligence() {
     setApprovingIndex(null);
 
     try {
+      // ==========================================
+      // GLOBAL ROUTER MODE
+      // ==========================================
+      if (currentTarget === "global") {
+        // Send a lightweight catalog mapping of your MongoDB data to the LLM
+        const sopCatalogForLLM = availableSops.map(s => ({
+          id: s.embeddingId || s.sopId,
+          sopId: s.sopId,
+          title: s.title,
+          type: s.type
+        }));
+
+        const res = await fetch(`${API_RAG_URL}/user/global-chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: currentQuestion,
+            available_sops: sopCatalogForLLM
+          }),
+        });
+
+        const data = await res.json();
+
+        // 1. If LLM found an exact SOP match based on the query, auto-switch to it!
+        if (data.intent === "auto_select" && data.auto_select_id) {
+          setEmbeddingId(data.auto_select_id);
+          
+          const matchedSop = availableSops.find(s => s.embeddingId === data.auto_select_id || s.sopId === data.auto_select_id);
+          const sopName = matchedSop ? matchedSop.sopId : data.auto_select_id;
+
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", type: "answer", content: `*Detected intent for **${sopName}**. Automatically switching context to answer your question...*` }
+          ]);
+          
+          // Recursively call handleAsk to fire the query at the specific SOP document
+          return handleAsk(currentQuestion, skipCache, data.auto_select_id);
+        }
+
+        // 2. If it's just a greeting, a request to list SOPs, or unknown
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", type: "answer", content: data.message, originalQuestion: currentQuestion }
+        ]);
+
+        // 3. Append loose suggestions if any exist
+        if (data.suggested_ids && data.suggested_ids.length > 0) {
+          setMessages((prev) => [
+            ...prev,
+            { 
+              role: "assistant", 
+              type: "suggestions", 
+              content: "I'm not 100% sure, but these SOPs might contain what you need:", 
+              suggestions: data.suggested_ids.map(id => {
+                const match = availableSops.find(s => s.embeddingId === id || s.sopId === id);
+                return match ? match.sopId : id;
+              }), 
+              originalQuestion: currentQuestion 
+            }
+          ]);
+        }
+        setLoading(false);
+        return; // Exit here, global logic is complete
+      }
+
+      // ==========================================
+      // STANDARD SPECIFIC SOP RAG QUERY
+      // ==========================================
       const res = await fetch(`${API_RAG_URL}/user/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          document_id: embeddingId,
+          document_id: currentTarget,
           question: currentQuestion,
           skip_cache: skipCache,
         }),
@@ -296,6 +403,7 @@ export default function SOPIntelligence() {
 
   // Helper to find selected SOP title for the header
   const getSelectedSopTitle = () => {
+    if (embeddingId === "global") return "🌍 Global AI Assistant";
     const selected = availableSops.find(s => s.embeddingId === embeddingId || s.sopId === embeddingId);
     return selected ? `${selected.sopId} ${selected.title ? `- ${selected.title}` : ""}` : embeddingId;
   };
@@ -323,17 +431,16 @@ export default function SOPIntelligence() {
                 onChange={(e) => {
                   const selectedId = e.target.value;
                   setEmbeddingId(selectedId);
-                  // 🔥 Open chat mode immediately if a valid selection is made
-                  if (selectedId) {
+                  // Only open chat automatically if they pick a specific SOP.
+                  // If they select Global, let them type first.
+                  if (selectedId && selectedId !== "global") {
                     setChatMode(true);
                   }
                 }}
                 disabled={fetchingSops}
                 className="w-full appearance-none rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-10 text-sm shadow-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer text-slate-700"
               >
-                <option value="" disabled>
-                  {fetchingSops ? "Loading SOPs..." : "Select an SOP to analyze..."}
-                </option>
+                <option value="global">🌍 Global AI Assistant (Ask anything)</option>
                 {availableSops.map((sop) => (
                   <option key={sop._id} value={sop.embeddingId || sop.sopId}>
                     {sop.sopId} {sop.title ? `- ${sop.title}` : ""}
@@ -350,7 +457,7 @@ export default function SOPIntelligence() {
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAsk()}
                 disabled={!embeddingId}
-                placeholder={embeddingId ? "Ask anything about the selected SOP…" : "Select an SOP above first..."}
+                placeholder={embeddingId === "global" ? "Ask me anything (e.g. 'list all maintenance sops')" : "Ask anything about the selected SOP…"}
                 className="w-full rounded-2xl border border-slate-300 bg-white py-4 pl-12 pr-14 text-sm shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50 disabled:cursor-not-allowed"
               />
               <button
@@ -393,12 +500,25 @@ export default function SOPIntelligence() {
               onClick={() => {
                 setChatMode(false);
                 setMessages([]);
-                setEmbeddingId("");
+                setEmbeddingId("global");
               }}
               className="text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors"
             >
-              Change SOP
+              Reset Chat
             </button>
+
+            {/* 🌟 NEW: Clear Cache Button - Admin Only & Only on Specific SOPs */}
+            {isAdmin && embeddingId !== "global" && (
+              <button 
+                onClick={handleClearCache}
+                className="flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
+                title="Clear AI Cache for this specific SOP"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Clear Cache
+              </button>
+            )}
+
             <button 
               onClick={handleClearHistory}
               className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-600 transition-colors"
@@ -460,14 +580,16 @@ export default function SOPIntelligence() {
                             "{sug}"
                           </button>
                         ))}
-                        <button
-                          onClick={() => handleAsk(msg.originalQuestion, true)}
-                          disabled={isRagOffline}
-                          className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-100 text-slate-500 transition-colors mt-2 disabled:opacity-50"
-                        >
-                          <ArrowRight className="w-4 h-4" />
-                          None of these, search anyway.
-                        </button>
+                        {embeddingId !== "global" && (
+                          <button
+                            onClick={() => handleAsk(msg.originalQuestion, true)}
+                            disabled={isRagOffline}
+                            className="flex items-center gap-2 text-left px-3 py-2 text-sm border border-transparent rounded-lg hover:bg-slate-100 text-slate-500 transition-colors mt-2 disabled:opacity-50"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                            None of these, search anyway.
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : (

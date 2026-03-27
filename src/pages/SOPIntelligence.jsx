@@ -270,7 +270,6 @@ export default function SOPIntelligence() {
               type: "suggestions", 
               content: "These SOPs might contain what you need:", 
               suggestions: data.suggested_ids.map(id => {
-                // FIXED: Try matching embeddingId OR sopId OR title, and fallback to the provided string itself
                 const match = availableSops.find(s => s.embeddingId === id || s.sopId === id || s.title === id);
                 return match ? match.sopId : id; 
               }), 
@@ -496,16 +495,34 @@ export default function SOPIntelligence() {
                             <HelpCircle className="w-4 h-4 text-orange-500" /> {msg.content}
                           </p>
                           <div className="flex flex-col gap-1.5 mt-1">
-                            {msg.suggestions.map((sug, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => handleAsk(sug, false)}
-                                disabled={isRagOffline}
-                                className="text-left px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all shadow-sm disabled:opacity-50 font-medium"
-                              >
-                                "{sug}"
-                              </button>
-                            ))}
+                            {msg.suggestions.map((sug, idx) => {
+                              // BUG FIX: Check if this suggestion is actually an SOP routing prompt
+                              const matchedSop = availableSops.find(s => s.sopId === sug || s.embeddingId === sug || s.title === sug);
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    if (matchedSop) {
+                                      // It is an SOP! Route the *original question* to this specific SOP
+                                      setMessages((prev) => [
+                                        ...prev,
+                                        { role: "assistant", type: "answer", content: `*Searching for "**${msg.originalQuestion}**" in **${matchedSop.sopId}**...*` }
+                                      ]);
+                                      // Call handleAsk with original question and explicit SOP target
+                                      handleAsk(msg.originalQuestion, false, matchedSop.embeddingId);
+                                    } else {
+                                      // It's a regular string suggestion (like "What is the procedure?")
+                                      handleAsk(sug, false);
+                                    }
+                                  }}
+                                  disabled={isRagOffline}
+                                  className="text-left px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-2"
+                                >
+                                  {/* If it's an SOP, render cleaner without quotes and add an icon to show it's a route */}
+                                  {matchedSop ? <><ArrowRight className="w-3 h-3 text-orange-500" /> {sug}</> : `"${sug}"`}
+                                </button>
+                              );
+                            })}
                             {embeddingId !== "global" && (
                               <button
                                 onClick={() => handleAsk(msg.originalQuestion, true)}

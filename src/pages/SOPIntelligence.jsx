@@ -28,7 +28,7 @@ export default function SOPIntelligence() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [chatMode, setChatMode] = useState(false);
+  const [chatMode, setChatMode] = useState(true); // Changed to true to directly open chat window
   const [activeMedia, setActiveMedia] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
 
@@ -65,7 +65,7 @@ export default function SOPIntelligence() {
     const userRole = sessionStorage.getItem("role");
     setIsAdmin(userRole === "Admin");
 
-    // Fetch available SOPs for the dropdown
+    // Fetch available SOPs for the dropdown/routing
     const fetchSOPs = async () => {
       setFetchingSops(true);
       try {
@@ -94,14 +94,9 @@ export default function SOPIntelligence() {
 
   // Fetch history when entering chat mode or changing embedding ID
   useEffect(() => {
-    if (chatMode && embeddingId && embeddingId !== "global") {
+    // Now allows fetching for 'global' as well
+    if (chatMode && embeddingId) {
       fetchHistory(userId, embeddingId);
-    } else if (embeddingId === "global" && messages.length === 0) {
-      setMessages([{
-        role: "assistant", 
-        type: "answer", 
-        content: "Hi! I am your Global SOP Assistant. You can say 'hi', ask me to list available SOPs, or ask a specific question and I'll route it to the right document."
-      }]);
     }
   }, [chatMode, embeddingId, userId]);
 
@@ -160,7 +155,16 @@ export default function SOPIntelligence() {
         });
         setMessages(historyMessages);
       } else {
-        setMessages([]); // Clear if no history for this SOP
+        // Handle empty history states
+        if (embId === "global") {
+          setMessages([{
+            role: "assistant", 
+            type: "answer", 
+            content: "Hi! I am your Global SOP Assistant. You can say 'hi', ask me to list available SOPs, or ask a specific question and I'll route it to the right document."
+          }]);
+        } else {
+          setMessages([]); // Clear if no history for this specific SOP
+        }
       }
     } catch (err) {
       console.error("Failed to load history:", err);
@@ -172,8 +176,14 @@ export default function SOPIntelligence() {
     try {
       await fetch(`${API_RAG_URL}/user/clear-history/${userId}`, { method: "POST" });
       setMessages([]);
-      setChatMode(false);
-      setEmbeddingId("global");
+      // Reload the global welcome message if we are on global
+      if (embeddingId === "global") {
+        setMessages([{
+          role: "assistant", 
+          type: "answer", 
+          content: "Hi! I am your Global SOP Assistant. You can say 'hi', ask me to list available SOPs, or ask a specific question and I'll route it to the right document."
+        }]);
+      }
     } catch (err) {
       console.error("Failed to clear history:", err);
     }
@@ -255,6 +265,7 @@ export default function SOPIntelligence() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            user_id: userId, // Added userId to store global history
             question: currentQuestion,
             available_sops: sopCatalogForLLM
           }),
@@ -265,25 +276,23 @@ export default function SOPIntelligence() {
         // 1. If LLM found an exact SOP match based on the query, auto-switch to it
         if (data.intent === "auto_select" && data.auto_select_id) {
           
-          // Look up the matching SOP in your state (checking both sopId and embeddingId just in case)
           const matchedSop = availableSops.find(
             s => s.sopId === data.auto_select_id || s.embeddingId === data.auto_select_id
           );
 
           if (matchedSop) {
-            // Extract the strict embeddingId needed for the next RAG query
             const actualEmbeddingId = matchedSop.embeddingId;
             const sopName = matchedSop.sopId || "the requested document";
 
-            // Update the UI state
-            setEmbeddingId(actualEmbeddingId);
+            // ❌ REMOVED: setEmbeddingId(actualEmbeddingId); // <-- We no longer switch the UI state
 
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", type: "answer", content: `*Detected intent for **${sopName}**. Automatically switching context to answer your question...*` }
+              { role: "assistant", type: "answer", content: `*Detected intent for **${sopName}**. Searching that document for your answer...*` }
             ]);
             
-            // Recursively call handleAsk with the STRICT embeddingId
+            // Recursively call handleAsk. targetSopOverride ensures it queries the right DB,
+            // but the UI stays on "global"
             return handleAsk(currentQuestion, skipCache, actualEmbeddingId);
           }
         }
@@ -323,6 +332,7 @@ export default function SOPIntelligence() {
         body: JSON.stringify({
           user_id: userId,
           document_id: currentTarget, // This explicitly passes the embeddingId to the API
+          history_id: embeddingId,
           question: currentQuestion,
           skip_cache: skipCache,
         }),
@@ -503,6 +513,7 @@ export default function SOPIntelligence() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* If they click "Reset Chat", it takes them to the Manual Selector Landing Page */}
             <button 
               onClick={() => {
                 setChatMode(false);
@@ -511,7 +522,7 @@ export default function SOPIntelligence() {
               }}
               className="text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors"
             >
-              Reset Chat
+              Manual Select
             </button>
 
             {isAdmin && embeddingId !== "global" && (

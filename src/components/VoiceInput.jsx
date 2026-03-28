@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import io from "socket.io-client";
 import { Mic, Square, Send, Languages, Activity, MessageSquare } from "lucide-react";
 
-const socket = io("http://localhost:8003", {
+const socket = io("http://localhost:8000", {
   transports: ["websocket"],
 });
 

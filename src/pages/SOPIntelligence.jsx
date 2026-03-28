@@ -34,6 +34,10 @@ export default function SOPIntelligence() {
   const [availableSops, setAvailableSops] = useState([]);
   const [fetchingSops, setFetchingSops] = useState(true);
 
+  // Sync State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState({ type: null, message: "" });
+
   // Admin & Approval State
   const [isAdmin, setIsAdmin] = useState(false);
   const [approvingIndex, setApprovingIndex] = useState(null);
@@ -136,6 +140,7 @@ export default function SOPIntelligence() {
               isApproved: item.is_approved,
               adminComment: item.admin_comment,
               media: item.media || [],
+              pages: item.page_numbers || [],
               originalQuestion: item.question,
             });
           }
@@ -198,8 +203,65 @@ export default function SOPIntelligence() {
     }
   };
 
+  const handleGlobalSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus({ type: "info", message: "Fetching latest SOPs from database..." });
+
+    try {
+      // 1. Fetch SOPs from Node.js backend
+      const token = sessionStorage.getItem("token"); // Ensure token is available
+      const dbResponse = await fetch(`${API_BASE_URL}/api/sops`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!dbResponse.ok) throw new Error("Failed to fetch SOPs from the database.");
+      const allSops = await dbResponse.json();
+
+      // Filter for active SOPs
+      const activeSops = allSops.filter(sop => sop.status === "Active");
+
+      if (activeSops.length === 0) {
+        setSyncStatus({ type: "warning", message: "No active SOPs found to sync." });
+        setIsSyncing(false);
+        setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
+        return;
+      }
+
+      setSyncStatus({ 
+        type: "info", 
+        message: `Found ${activeSops.length} active SOPs. Building global vector database...` 
+      });
+
+      // 2. Send to Python RAG backend
+      const ragResponse = await fetch(`${API_RAG_URL}/api/bulk-global-embed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(activeSops),
+      });
+
+      if (!ragResponse.ok) {
+        const errorData = await ragResponse.json();
+        throw new Error(errorData.detail || "Failed to embed SOPs.");
+      }
+
+      const resultData = await ragResponse.json();
+      
+      setSyncStatus({ type: "success", message: `Success! ${resultData.message}` });
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
+
+    } catch (error) {
+      console.error("Sync Error:", error);
+      setSyncStatus({ type: "error", message: error.message });
+      setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleAsk = async (queryOverride = null, skipCache = false, targetSopOverride = null) => {
-    if (isRagOffline) return;
+    if (isRagOffline || isSyncing) return;
 
     const currentQuestion = queryOverride || question;
     if (!currentQuestion.trim()) return;
@@ -259,7 +321,7 @@ export default function SOPIntelligence() {
 
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", type: "answer", content: data.message, originalQuestion: currentQuestion }
+          { role: "assistant", type: "answer", content: data.data || data.message, originalQuestion: currentQuestion, media: data.media || [], pages: data.page_numbers || [] }
         ]);
 
         if (data.suggested_ids && data.suggested_ids.length > 0) {
@@ -319,6 +381,7 @@ export default function SOPIntelligence() {
             isApproved: data.is_approved || false,
             adminComment: data.admin_comment || "",
             media: data.media || [],
+            pages: data.page_numbers || [],
             originalQuestion: currentQuestion,
           },
         ]);
@@ -429,20 +492,44 @@ export default function SOPIntelligence() {
 
           <div className="flex items-center gap-2">
             {isAdmin && (
-              <button 
-                onClick={handleClearCache}
-                className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
-                  embeddingId === "global" 
-                    ? "text-amber-700 bg-amber-100 hover:bg-amber-200" 
-                    : "text-slate-600 bg-slate-100 hover:bg-slate-200"
-                }`}
-                title={embeddingId === "global" ? "Clear ALL AI Caches globally" : "Clear AI Cache for this SOP"}
-              >
-                <RefreshCw className="w-3 h-3" /> 
-                <span className="hidden sm:inline">
-                  {embeddingId === "global" ? "Clear All Caches" : "Clear Cache"}
-                </span>
-              </button>
+               <>
+                 <button 
+                  onClick={handleGlobalSync}
+                  disabled={isSyncing}
+                  className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
+                    isSyncing 
+                      ? "text-blue-700 bg-blue-100 cursor-not-allowed opacity-80" 
+                      : "text-blue-600 bg-blue-50 hover:bg-blue-100"
+                  }`}
+                  title="Sync latest SOPs to the Global Database"
+                >
+                  {isSyncing ? (
+                    <svg className="animate-spin w-3 h-3 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isSyncing ? "Syncing..." : "Sync Database"}
+                  </span>
+                </button>
+                <button 
+                  onClick={handleClearCache}
+                  className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
+                    embeddingId === "global" 
+                      ? "text-amber-700 bg-amber-100 hover:bg-amber-200" 
+                      : "text-slate-600 bg-slate-100 hover:bg-slate-200"
+                  }`}
+                  title={embeddingId === "global" ? "Clear ALL AI Caches globally" : "Clear AI Cache for this SOP"}
+                >
+                  <RefreshCw className="w-3 h-3" /> 
+                  <span className="hidden sm:inline">
+                    {embeddingId === "global" ? "Clear All Caches" : "Clear Cache"}
+                  </span>
+                </button>
+               </>
             )}
             <button 
               onClick={handleClearHistory}
@@ -456,6 +543,18 @@ export default function SOPIntelligence() {
         {isRagOffline && (
           <div className="bg-red-500 text-white px-4 py-1.5 shrink-0 flex items-center justify-center gap-2 text-[11px] font-medium shadow-sm z-20">
             <WifiOff className="h-3.5 w-3.5" /> System Offline: New questions cannot be answered right now.
+          </div>
+        )}
+
+        {/* STATUS BANNER */}
+        {syncStatus.message && (
+          <div className={`px-4 py-1.5 text-[11px] font-medium text-center shrink-0 shadow-sm z-20 ${
+            syncStatus.type === 'error' ? 'bg-red-50 text-red-700 border-b border-red-200' :
+            syncStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-b border-emerald-200' :
+            syncStatus.type === 'warning' ? 'bg-amber-50 text-amber-700 border-b border-amber-200' :
+            'bg-blue-50 text-blue-700 border-b border-blue-200'
+          }`}>
+            {syncStatus.message}
           </div>
         )}
 
@@ -496,7 +595,7 @@ export default function SOPIntelligence() {
                           </p>
                           <div className="flex flex-col gap-1.5 mt-1">
                             {msg.suggestions.map((sug, idx) => {
-                              // BUG FIX: Check if this suggestion is actually an SOP routing prompt
+                              // Check if this suggestion is actually an SOP routing prompt
                               const matchedSop = availableSops.find(s => s.sopId === sug || s.embeddingId === sug || s.title === sug);
                               return (
                                 <button
@@ -546,6 +645,13 @@ export default function SOPIntelligence() {
                           >
                             {msg.content}
                           </ReactMarkdown>
+
+                          {/* Render Citations/Pages at bottom of AI message */}
+                          {msg.pages && msg.pages.length > 0 && (
+                            <div className="mt-3 text-xs text-slate-500 border-t border-slate-100 pt-2">
+                              <strong className="text-slate-600">Referenced Documents & Pages:</strong> {msg.pages.join(' | ')}
+                            </div>
+                          )}
 
                           {/* Fallback Media Gallery */}
                           {msg.media && (() => {
@@ -653,7 +759,7 @@ export default function SOPIntelligence() {
         <div className="bg-white px-3 py-3 md:px-6 md:py-4 border-t border-slate-200 shrink-0">
           <div className="max-w-4xl mx-auto">
             <div className={`relative flex items-end rounded-xl border bg-white transition-all shadow-sm ${
-                isRagOffline ? "bg-slate-50 border-slate-200 opacity-70" : "border-slate-300 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-50"
+                isRagOffline || isSyncing ? "bg-slate-50 border-slate-200 opacity-70" : "border-slate-300 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-50"
               }`}
             >
               <textarea
@@ -669,14 +775,14 @@ export default function SOPIntelligence() {
                     handleAsk();
                   }
                 }}
-                placeholder={isRagOffline ? "Service disconnected..." : `Ask anything about ${embeddingId === 'global' ? 'all documents' : 'the selected SOP'}...`}
-                disabled={loading || isRagOffline}
+                placeholder={isRagOffline ? "Service disconnected..." : isSyncing ? "Syncing database, please wait..." : `Ask anything about ${embeddingId === 'global' ? 'all documents' : 'the selected SOP'}...`}
+                disabled={loading || isRagOffline || isSyncing}
                 rows={1}
                 className="w-full bg-transparent py-2.5 pl-4 pr-12 text-[13px] outline-none resize-none overflow-y-auto disabled:cursor-not-allowed max-h-[120px] scrollbar-thin scrollbar-thumb-slate-200"
               />
               <button
                 onClick={() => handleAsk()}
-                disabled={loading || !question.trim() || isRagOffline}
+                disabled={loading || !question.trim() || isRagOffline || isSyncing}
                 className="absolute right-1.5 bottom-1.5 rounded-lg bg-orange-500 p-1.5 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors shadow-sm"
               >
                 <ArrowRight className="h-4 w-4" />

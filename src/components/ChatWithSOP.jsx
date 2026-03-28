@@ -17,11 +17,15 @@ import {
   Trash2,
   ThumbsUp,
   ThumbsDown,
+  Mic,
+  Square,
+  Activity,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MediaModal from "../components/MediaModal";
 import { useServiceStatus } from "../context/ServiceStatusContext";
+import { useSarvamService } from "../services/sarvam_service"; 
 
 export default function ChatWithSOP({ sop, onClose }) {
   // --- STATE & REFS ---
@@ -32,8 +36,8 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [activeMedia, setActiveMedia] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
   
-  // 🔥 NEW: Admin & Approval State
-  const [isAdmin, setIsAdmin] = useState(false); // <-- Admin check state
+  // 🔥 Admin & Approval State
+  const [isAdmin, setIsAdmin] = useState(false); 
   const [approvingIndex, setApprovingIndex] = useState(null);
   const [adminComment, setAdminComment] = useState("");
   const [isApproving, setIsApproving] = useState(false);
@@ -46,6 +50,23 @@ export default function ChatWithSOP({ sop, onClose }) {
   const isRagOffline = rag.status !== "online" && rag.status !== "connecting";
 
   const API_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
+
+  // 🔥 SARVAM VOICE SERVICE
+  const {
+    isRecording,
+    transcript,
+    translation,
+    toggleRecording,
+    stopRecording,
+    resetData: resetVoiceData,
+  } = useSarvamService();
+
+  // Sync Native Transcript into the Main Question Input
+  useEffect(() => {
+    if (isRecording && transcript) {
+      setQuestion(transcript); // Show the exact heard words in native language
+    }
+  }, [transcript, isRecording]);
 
   // --- DERIVED SOP ID ---
   const rawId = sop?.sopId || sop?._id || "unknown";
@@ -64,7 +85,6 @@ export default function ChatWithSOP({ sop, onClose }) {
     setUserId(storedId);
     fetchHistory(storedId);
 
-    // 🔥 NEW: Check for Admin Role in Local Storage
     const userRole = sessionStorage.getItem("role");
     setIsAdmin(userRole === "Admin");
   }, []);
@@ -109,7 +129,6 @@ export default function ChatWithSOP({ sop, onClose }) {
     }, 0);
   };
 
-  // 🔥 Function to submit approval to backend
   const submitApproval = async (index, msg) => {
     if (isRagOffline) return;
     setIsApproving(true);
@@ -203,12 +222,26 @@ export default function ChatWithSOP({ sop, onClose }) {
   const handleAsk = async (queryOverride = null, skipCache = false) => {
     if (isRagOffline) return;
 
-    const currentQuestion = queryOverride || question;
-    if (!currentQuestion.trim()) return;
+    if (isRecording) {
+      stopRecording();
+    }
 
+    // The text the user actually saw/typed/spoke (Native Language)
+    const rawInput = queryOverride || question;
+    if (!rawInput.trim()) return;
+
+    // The text we send to the backend to search the SOP (English)
+    let englishQuestion = rawInput;
+
+    // If they used voice and we have a translation, use the translation for the backend
+    if (!queryOverride && transcript && rawInput.trim() === transcript.trim() && translation) {
+      englishQuestion = translation; 
+    }
+
+    // Show the NATIVE Question in the chat bubble
     const displayQuestion = skipCache
-      ? `Search anyway: "${currentQuestion}"`
-      : currentQuestion;
+      ? `Search anyway: "${rawInput}"`
+      : rawInput;
 
     setMessages((prev) => [
       ...prev,
@@ -217,8 +250,10 @@ export default function ChatWithSOP({ sop, onClose }) {
 
     if (!queryOverride) {
       setQuestion("");
+      resetVoiceData(); // Clear the Sarvam voice states so the next message is fresh
       if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
+    
     setLoading(true);
     setApprovingIndex(null); 
 
@@ -229,7 +264,9 @@ export default function ChatWithSOP({ sop, onClose }) {
         body: JSON.stringify({
           user_id: userId,
           document_id: safeDocumentId,
-          question: currentQuestion,
+          question: englishQuestion,      // English text for RAG to search
+          raw_question: rawInput,         // Raw spoken/typed text
+          detected_language: "auto",      // Flag for backend to translate answer back later
           skip_cache: skipCache,
         }),
       });
@@ -244,7 +281,7 @@ export default function ChatWithSOP({ sop, onClose }) {
             type: "suggestions",
             content: data.message || "Did you mean one of these?",
             suggestions: data.data || [],
-            originalQuestion: data.original_question || currentQuestion,
+            originalQuestion: data.original_question || englishQuestion,
             timestamp: new Date(),
           },
         ]);
@@ -264,7 +301,7 @@ export default function ChatWithSOP({ sop, onClose }) {
             isApproved: data.is_approved || false,
             adminComment: data.admin_comment || "",
             media: data.media || [],
-            originalQuestion: currentQuestion,
+            originalQuestion: englishQuestion,
             timestamp: new Date(),
           },
         ]);
@@ -626,7 +663,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
                         )}
 
-                        {/* 🔥 NEW: Inline Approval Form (Only visible for Admins) */}
                         {approvingIndex === i && !msg.isApproved && isAdmin && (
                           <div className="mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex flex-col gap-2">
                             <label className="text-xs font-semibold text-emerald-800">
@@ -659,7 +695,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
                         )}
 
-                        {/* Action Bar */}
                         <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2">
                           <div className="text-xs text-slate-500">
                             {msg.source?.includes("cache")
@@ -668,7 +703,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {/* 🔥 NEW: Approve Button (Only visible for Admins) */}
                             {!msg.isApproved && approvingIndex !== i && isAdmin && (
                               <button
                                 onClick={() => {
@@ -776,8 +810,17 @@ export default function ChatWithSOP({ sop, onClose }) {
             </div>
           </div>
 
-          {/* Input Area */}
-          <div className="border-t px-6 py-4 bg-white shrink-0">
+          {/* 🔥 INPUT AREA WITH VOICE BUTTON */}
+          <div className="border-t px-6 py-4 bg-white shrink-0 relative">
+            
+            {/* English Translation Indicator above input */}
+            {isRecording && translation && (
+              <div className="absolute -top-7 left-6 bg-blue-50 text-blue-700 text-xs px-3 py-1.5 rounded-t-lg border border-blue-100 border-b-0 flex items-center gap-2 shadow-sm z-10 transition-all">
+                <Activity size={12} className="animate-pulse" />
+                <span className="truncate max-w-[280px]">Translating: "{translation}"</span>
+              </div>
+            )}
+
             <div
               className={`flex items-end gap-2 rounded-xl border px-3 py-2 transition-all
               ${
@@ -786,6 +829,21 @@ export default function ChatWithSOP({ sop, onClose }) {
                   : "bg-slate-50 border-slate-200 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500"
               }`}
             >
+              {/* Mic/Stop Button */}
+              <button
+                onClick={toggleRecording}
+                disabled={isRagOffline}
+                className={`flex-shrink-0 p-2 mb-0.5 rounded-full transition-colors duration-200 flex items-center justify-center
+                  ${
+                    isRecording
+                      ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse"
+                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  }`}
+                title={isRecording ? "Stop Recording" : "Start Voice Input"}
+              >
+                {isRecording ? <Square size={16} fill="currentColor" /> : <Mic size={16} />}
+              </button>
+
               <textarea
                 ref={textareaRef}
                 value={question}
@@ -800,27 +858,32 @@ export default function ChatWithSOP({ sop, onClose }) {
                 placeholder={
                   isRagOffline
                     ? "Service disconnected..."
+                    : isRecording 
+                    ? "Listening in your language..."
                     : `Ask about ${sop?.id ?? "this SOP"}...`
                 }
                 disabled={loading || isRagOffline}
                 rows={1}
               />
+
               <div className="flex items-center gap-2 pb-1">
                 <button
                   onClick={() => handleAsk()}
                   disabled={loading || !question.trim() || isRagOffline}
-                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors disabled:cursor-not-allowed shrink-0"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors disabled:cursor-not-allowed shrink-0"
                 >
-                  <Send className="h-3 w-3" />
+                  <Send className="h-4 w-4" />
                 </button>
               </div>
             </div>
+
             <p className="mt-2 text-xs text-slate-400 text-center">
               {isRagOffline
                 ? "Chat is unavailable while service is offline."
-                : "Press Enter to send, Shift+Enter for new line"}
+                : "Press Enter to send, Shift+Enter for new line. Tap Mic to dictate in your native language."}
             </p>
           </div>
+
         </div>
       </div>
 

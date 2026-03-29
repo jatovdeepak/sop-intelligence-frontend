@@ -264,9 +264,7 @@ export default function ChatWithSOP({ sop, onClose }) {
         body: JSON.stringify({
           user_id: userId,
           document_id: safeDocumentId,
-          question: englishQuestion,      // English text for RAG to search
-          raw_question: rawInput,         // Raw spoken/typed text
-          detected_language: "auto",      // Flag for backend to translate answer back later
+          question: rawInput, 
           skip_cache: skipCache,
         }),
       });

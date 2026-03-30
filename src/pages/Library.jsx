@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
-import ChatWithSOP from "../components/ChatWithSOP";
 import AddSOPModal from "../components/AddSOPModal";
 import EditSOPModal from "../components/EditSOPModal";
 import DataExtractor from "../sop-data-extractor/DataExtractor";

@@ -13,12 +13,17 @@ import {
   ChevronDown,
   RefreshCw,
   MessageSquare,
-  AlertCircle
+  AlertCircle,
+  Mic,
+  Square,
+  Activity,
+  Send,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MediaModal from "../components/MediaModal";
 import { useServiceStatus } from "../context/ServiceStatusContext";
+import { useSarvamService } from "../services/sarvam_service"; // 🔥 Added Sarvam Import
 
 export default function SOPIntelligence() {
   // --- STATE & REFS ---
@@ -52,8 +57,27 @@ export default function SOPIntelligence() {
   const isRagOffline = rag?.status !== "online" && rag?.status !== "connecting";
 
   // API URLs
-  const API_RAG_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+  const API_RAG_URL =
+    import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+  // 🔥 SARVAM VOICE SERVICE
+  const {
+    isRecording,
+    transcript,
+    translation,
+    toggleRecording,
+    stopRecording,
+    resetData: resetVoiceData,
+  } = useSarvamService();
+
+  // Sync Native Transcript into the Main Question Input
+  useEffect(() => {
+    if (isRecording && transcript) {
+      setQuestion(transcript); // Show the exact heard words in native language
+    }
+  }, [transcript, isRecording]);
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -102,7 +126,10 @@ export default function SOPIntelligence() {
   const handleTextareaInput = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        120
+      )}px`;
     }
   };
 
@@ -127,7 +154,8 @@ export default function SOPIntelligence() {
             historyMessages.push({
               role: "assistant",
               type: "suggestions",
-              content: "I found similar questions in my memory. Did you mean one of these?",
+              content:
+                "I found similar questions in my memory. Did you mean one of these?",
               suggestions: item.suggestions,
               originalQuestion: item.question,
             });
@@ -156,10 +184,16 @@ export default function SOPIntelligence() {
   };
 
   const handleClearHistory = async () => {
-    if (!window.confirm("Are you sure you want to clear your personal chat history for this SOP?")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to clear your personal chat history for this SOP?"
+      )
+    )
+      return;
     try {
-      await fetch(`${API_RAG_URL}/user/clear-history/${userId}`, { method: "POST" });
-      // Clear messages entirely to return to the landing page
+      await fetch(`${API_RAG_URL}/user/clear-history/${userId}`, {
+        method: "POST",
+      });
       setMessages([]);
     } catch (err) {
       console.error("Failed to clear history:", err);
@@ -171,14 +205,23 @@ export default function SOPIntelligence() {
 
     // --- GLOBAL CACHE WIPE ---
     if (embeddingId === "global") {
-      if (!window.confirm("⚠️ WARNING: Are you sure you want to clear ALL verified AI caches across EVERY document? This action cannot be undone.")) return;
-      
+      if (
+        !window.confirm(
+          "⚠️ WARNING: Are you sure you want to clear ALL verified AI caches across EVERY document? This action cannot be undone."
+        )
+      )
+        return;
+
       try {
-        const res = await fetch(`${API_RAG_URL}/admin/clear-all-cache`, { method: "POST" });
+        const res = await fetch(`${API_RAG_URL}/admin/clear-all-cache`, {
+          method: "POST",
+        });
         if (res.ok) {
           alert("All AI caches have been cleared globally.");
         } else {
-          alert("Failed to clear caches. You may not have the required permissions.");
+          alert(
+            "Failed to clear caches. You may not have the required permissions."
+          );
         }
       } catch (err) {
         console.error("Failed to clear all caches:", err);
@@ -188,14 +231,24 @@ export default function SOPIntelligence() {
     }
 
     // --- SPECIFIC SOP CACHE WIPE ---
-    if (!window.confirm(`Are you sure you want to clear the AI cache for this document? This removes all verified answers.`)) return;
-    
+    if (
+      !window.confirm(
+        `Are you sure you want to clear the AI cache for this document? This removes all verified answers.`
+      )
+    )
+      return;
+
     try {
-      const res = await fetch(`${API_RAG_URL}/admin/clear-cache/${embeddingId}`, { method: "POST" });
+      const res = await fetch(
+        `${API_RAG_URL}/admin/clear-cache/${embeddingId}`,
+        { method: "POST" }
+      );
       if (res.ok) {
         alert(`Cache cleared successfully.`);
       } else {
-        alert("Failed to clear cache. You may not have the required permissions.");
+        alert(
+          "Failed to clear cache. You may not have the required permissions."
+        );
       }
     } catch (err) {
       console.error("Failed to clear cache:", err);
@@ -205,34 +258,38 @@ export default function SOPIntelligence() {
 
   const handleGlobalSync = async () => {
     setIsSyncing(true);
-    setSyncStatus({ type: "info", message: "Fetching latest SOPs from database..." });
+    setSyncStatus({
+      type: "info",
+      message: "Fetching latest SOPs from database...",
+    });
 
     try {
-      // 1. Fetch SOPs from Node.js backend
-      const token = sessionStorage.getItem("token"); // Ensure token is available
+      const token = sessionStorage.getItem("token");
       const dbResponse = await fetch(`${API_BASE_URL}/api/sops`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!dbResponse.ok) throw new Error("Failed to fetch SOPs from the database.");
+      if (!dbResponse.ok)
+        throw new Error("Failed to fetch SOPs from the database.");
       const allSops = await dbResponse.json();
 
-      // Filter for active SOPs
-      const activeSops = allSops.filter(sop => sop.status === "Active");
+      const activeSops = allSops.filter((sop) => sop.status === "Active");
 
       if (activeSops.length === 0) {
-        setSyncStatus({ type: "warning", message: "No active SOPs found to sync." });
+        setSyncStatus({
+          type: "warning",
+          message: "No active SOPs found to sync.",
+        });
         setIsSyncing(false);
         setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
         return;
       }
 
-      setSyncStatus({ 
-        type: "info", 
-        message: `Found ${activeSops.length} active SOPs. Building global vector database...` 
+      setSyncStatus({
+        type: "info",
+        message: `Found ${activeSops.length} active SOPs. Building global vector database...`,
       });
 
-      // 2. Send to Python RAG backend
       const ragResponse = await fetch(`${API_RAG_URL}/api/bulk-global-embed`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -245,12 +302,12 @@ export default function SOPIntelligence() {
       }
 
       const resultData = await ragResponse.json();
-      
-      setSyncStatus({ type: "success", message: `Success! ${resultData.message}` });
-      
-      // Auto-hide success message after 5 seconds
-      setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
 
+      setSyncStatus({
+        type: "success",
+        message: `Success! ${resultData.message}`,
+      });
+      setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
     } catch (error) {
       console.error("Sync Error:", error);
       setSyncStatus({ type: "error", message: error.message });
@@ -260,11 +317,20 @@ export default function SOPIntelligence() {
     }
   };
 
-  const handleAsk = async (queryOverride = null, skipCache = false, targetSopOverride = null) => {
+  const handleAsk = async (
+    queryOverride = null,
+    skipCache = false,
+    targetSopOverride = null
+  ) => {
     if (isRagOffline || isSyncing) return;
 
-    const currentQuestion = queryOverride || question;
-    if (!currentQuestion.trim()) return;
+    if (isRecording) {
+      stopRecording();
+    }
+
+    // The text the user actually saw/typed/spoke (Native Language)
+    const rawInput = queryOverride || question;
+    if (!rawInput.trim()) return;
 
     const currentTarget = targetSopOverride || embeddingId;
     if (!currentTarget) {
@@ -272,28 +338,47 @@ export default function SOPIntelligence() {
       return;
     }
 
-    const displayQuestion = skipCache ? `Search anyway: "${currentQuestion}"` : currentQuestion;
+    // The text we send to the backend to search the SOP (English)
+    let englishQuestion = rawInput;
+
+    // If they used voice and we have a translation, use the translation for the backend
+    if (
+      !queryOverride &&
+      transcript &&
+      rawInput.trim() === transcript.trim() &&
+      translation
+    ) {
+      englishQuestion = translation;
+    }
+
+    const displayQuestion = skipCache
+      ? `Search anyway: "${rawInput}"`
+      : rawInput;
 
     if (!targetSopOverride) {
-      setMessages((prev) => [...prev, { role: "user", content: displayQuestion }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: displayQuestion },
+      ]);
     }
 
     if (!queryOverride) {
       setQuestion("");
+      resetVoiceData(); // Clear the Sarvam voice states
       if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
-    
+
     setLoading(true);
     setApprovingIndex(null);
 
     try {
       // --- GLOBAL ROUTER MODE ---
       if (currentTarget === "global") {
-        const sopCatalogForLLM = availableSops.map(s => ({
+        const sopCatalogForLLM = availableSops.map((s) => ({
           id: s.embeddingId,
           sopId: s.sopId,
           title: s.title,
-          type: s.type
+          type: s.type,
         }));
 
         const res = await fetch(`${API_RAG_URL}/user/global-chat`, {
@@ -301,46 +386,68 @@ export default function SOPIntelligence() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: userId,
-            question: currentQuestion,
-            available_sops: sopCatalogForLLM
+            question: englishQuestion, // Send Translated English query
+            available_sops: sopCatalogForLLM,
           }),
         });
 
         const data = await res.json();
 
         if (data.intent === "auto_select" && data.auto_select_id) {
-          const matchedSop = availableSops.find(s => s.sopId === data.auto_select_id || s.embeddingId === data.auto_select_id);
+          const matchedSop = availableSops.find(
+            (s) =>
+              s.sopId === data.auto_select_id ||
+              s.embeddingId === data.auto_select_id
+          );
           if (matchedSop) {
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", type: "answer", content: `*Detected intent for **${matchedSop.sopId}**. Searching document...*` }
+              {
+                role: "assistant",
+                type: "answer",
+                content: `*Detected intent for **${matchedSop.sopId}**. Searching document...*`,
+              },
             ]);
-            return handleAsk(currentQuestion, skipCache, matchedSop.embeddingId);
+            return handleAsk(
+              englishQuestion,
+              skipCache,
+              matchedSop.embeddingId
+            );
           }
         }
 
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", type: "answer", content: data.data || data.message, originalQuestion: currentQuestion, media: data.media || [], pages: data.page_numbers || [] }
+          {
+            role: "assistant",
+            type: "answer",
+            content: data.data || data.message,
+            originalQuestion: englishQuestion,
+            media: data.media || [],
+            pages: data.page_numbers || [],
+          },
         ]);
 
         if (data.suggested_ids && data.suggested_ids.length > 0) {
           setMessages((prev) => [
             ...prev,
-            { 
-              role: "assistant", 
-              type: "suggestions", 
-              content: "These SOPs might contain what you need:", 
-              suggestions: data.suggested_ids.map(id => {
-                const match = availableSops.find(s => s.embeddingId === id || s.sopId === id || s.title === id);
-                return match ? match.sopId : id; 
-              }), 
-              originalQuestion: currentQuestion 
-            }
+            {
+              role: "assistant",
+              type: "suggestions",
+              content: "These SOPs might contain what you need:",
+              suggestions: data.suggested_ids.map((id) => {
+                const match = availableSops.find(
+                  (s) =>
+                    s.embeddingId === id || s.sopId === id || s.title === id
+                );
+                return match ? match.sopId : id;
+              }),
+              originalQuestion: englishQuestion,
+            },
           ]);
         }
         setLoading(false);
-        return; 
+        return;
       }
 
       // --- SPECIFIC SOP QUERY ---
@@ -351,7 +458,7 @@ export default function SOPIntelligence() {
           user_id: userId,
           document_id: currentTarget,
           history_id: embeddingId,
-          question: currentQuestion,
+          question: englishQuestion, // Send Translated English query
           skip_cache: skipCache,
         }),
       });
@@ -366,11 +473,13 @@ export default function SOPIntelligence() {
             type: "suggestions",
             content: data.message || "Did you mean one of these?",
             suggestions: data.data || [],
-            originalQuestion: data.original_question || currentQuestion,
+            originalQuestion: data.original_question || englishQuestion,
           },
         ]);
       } else {
-        let finalContent = (data.data || data.answer || "").trim() || "⚠️ Sorry, received an empty response.";
+        let finalContent =
+          (data.data || data.answer || "").trim() ||
+          "⚠️ Sorry, received an empty response.";
         setMessages((prev) => [
           ...prev,
           {
@@ -382,7 +491,7 @@ export default function SOPIntelligence() {
             adminComment: data.admin_comment || "",
             media: data.media || [],
             pages: data.page_numbers || [],
-            originalQuestion: currentQuestion,
+            originalQuestion: englishQuestion,
           },
         ]);
       }
@@ -390,7 +499,11 @@ export default function SOPIntelligence() {
       console.error("Error:", error);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", type: "answer", content: "❌ An error occurred while fetching the response." },
+        {
+          role: "assistant",
+          type: "answer",
+          content: "❌ An error occurred while fetching the response.",
+        },
       ]);
     } finally {
       setLoading(false);
@@ -414,7 +527,11 @@ export default function SOPIntelligence() {
 
       if (res.ok) {
         setMessages((prev) =>
-          prev.map((m, i) => i === index ? { ...m, isApproved: true, adminComment: adminComment } : m)
+          prev.map((m, i) =>
+            i === index
+              ? { ...m, isApproved: true, adminComment: adminComment }
+              : m
+          )
         );
         setApprovingIndex(null);
         setAdminComment("");
@@ -433,18 +550,28 @@ export default function SOPIntelligence() {
       <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4 shadow-sm border border-orange-200">
         <Sparkles className="w-6 h-6 text-orange-500" />
       </div>
-      <h2 className="text-xl font-bold text-slate-800 mb-2">How can I help you today?</h2>
+      <h2 className="text-xl font-bold text-slate-800 mb-2">
+        How can I help you today?
+      </h2>
       <p className="text-xs text-slate-500 mb-6">
-        {embeddingId === "global" 
+        {embeddingId === "global"
           ? "Ask any question and I will automatically route it to the right documentation to get you instant, verified answers."
           : "Select an SOP from the top menu and ask any question to get instant, verified answers based on our documentation."}
       </p>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
-        {['What is the emergency shutdown procedure?', 'List all daily maintenance tasks', 'Show me the safety protocols', 'Who needs to approve a bypass?'].map((prompt, i) => (
-          <button 
+        {[
+          "What is the emergency shutdown procedure?",
+          "List all daily maintenance tasks",
+          "Show me the safety protocols",
+          "Who needs to approve a bypass?",
+        ].map((prompt, i) => (
+          <button
             key={i}
-            onClick={() => setQuestion(prompt)}
+            onClick={() => {
+              setQuestion(prompt);
+              setTimeout(() => textareaRef.current?.focus(), 0);
+            }}
             className="p-3 text-left border border-slate-200 rounded-xl hover:border-orange-300 hover:bg-orange-50 hover:shadow-sm transition-all text-xs text-slate-600 bg-white"
           >
             {prompt}
@@ -457,7 +584,6 @@ export default function SOPIntelligence() {
   return (
     <>
       <div className="flex h-full flex-col bg-slate-50 font-sans">
-        
         {/* TOP HEADER */}
         <header className="shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shadow-sm z-10">
           <div className="flex items-center gap-3 flex-1">
@@ -465,8 +591,10 @@ export default function SOPIntelligence() {
               <MessageSquare className="w-4 h-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-slate-800 leading-tight">SOP Intelligence</span>
-              
+              <span className="text-xs font-bold text-slate-800 leading-tight">
+                SOP Intelligence
+              </span>
+
               <div className="flex items-center text-[10px] mt-0.5">
                 <span className="text-slate-500 mr-1.5">Context:</span>
                 <div className="relative inline-flex items-center">
@@ -478,7 +606,10 @@ export default function SOPIntelligence() {
                   >
                     <option value="global">🌍 Global AI (Search All)</option>
                     {availableSops.map((sop) => (
-                      <option key={sop._id || sop.embeddingId} value={sop.embeddingId}>
+                      <option
+                        key={sop._id || sop.embeddingId}
+                        value={sop.embeddingId}
+                      >
                         {sop.sopId} {sop.title ? `- ${sop.title}` : ""}
                       </option>
                     ))}
@@ -486,27 +617,42 @@ export default function SOPIntelligence() {
                   <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
                 </div>
               </div>
-
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {isAdmin && (
-               <>
-                 <button 
+              <>
+                <button
                   onClick={handleGlobalSync}
                   disabled={isSyncing}
                   className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
-                    isSyncing 
-                      ? "text-blue-700 bg-blue-100 cursor-not-allowed opacity-80" 
+                    isSyncing
+                      ? "text-blue-700 bg-blue-100 cursor-not-allowed opacity-80"
                       : "text-blue-600 bg-blue-50 hover:bg-blue-100"
                   }`}
                   title="Sync latest SOPs to the Global Database"
                 >
                   {isSyncing ? (
-                    <svg className="animate-spin w-3 h-3 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg
+                      className="animate-spin w-3 h-3 text-blue-600"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
                     </svg>
                   ) : (
                     <RefreshCw className="w-3 h-3" />
@@ -515,67 +661,89 @@ export default function SOPIntelligence() {
                     {isSyncing ? "Syncing..." : "Sync Database"}
                   </span>
                 </button>
-                <button 
+                <button
                   onClick={handleClearCache}
                   className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
-                    embeddingId === "global" 
-                      ? "text-amber-700 bg-amber-100 hover:bg-amber-200" 
+                    embeddingId === "global"
+                      ? "text-amber-700 bg-amber-100 hover:bg-amber-200"
                       : "text-slate-600 bg-slate-100 hover:bg-slate-200"
                   }`}
-                  title={embeddingId === "global" ? "Clear ALL AI Caches globally" : "Clear AI Cache for this SOP"}
+                  title={
+                    embeddingId === "global"
+                      ? "Clear ALL AI Caches globally"
+                      : "Clear AI Cache for this SOP"
+                  }
                 >
-                  <RefreshCw className="w-3 h-3" /> 
+                  <RefreshCw className="w-3 h-3" />
                   <span className="hidden sm:inline">
-                    {embeddingId === "global" ? "Clear All Caches" : "Clear Cache"}
+                    {embeddingId === "global"
+                      ? "Clear All Caches"
+                      : "Clear Cache"}
                   </span>
                 </button>
-               </>
+              </>
             )}
-            <button 
+            <button
               onClick={handleClearHistory}
               className="flex items-center gap-1 text-[11px] font-medium text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md transition-colors"
             >
-              <Trash2 className="w-3 h-3" /> <span className="hidden sm:inline">Clear Chat</span>
+              <Trash2 className="w-3 h-3" />{" "}
+              <span className="hidden sm:inline">Clear Chat</span>
             </button>
           </div>
         </header>
 
         {isRagOffline && (
           <div className="bg-red-500 text-white px-4 py-1.5 shrink-0 flex items-center justify-center gap-2 text-[11px] font-medium shadow-sm z-20">
-            <WifiOff className="h-3.5 w-3.5" /> System Offline: New questions cannot be answered right now.
+            <WifiOff className="h-3.5 w-3.5" /> System Offline: New questions
+            cannot be answered right now.
           </div>
         )}
 
         {/* STATUS BANNER */}
         {syncStatus.message && (
-          <div className={`px-4 py-1.5 text-[11px] font-medium text-center shrink-0 shadow-sm z-20 ${
-            syncStatus.type === 'error' ? 'bg-red-50 text-red-700 border-b border-red-200' :
-            syncStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-b border-emerald-200' :
-            syncStatus.type === 'warning' ? 'bg-amber-50 text-amber-700 border-b border-amber-200' :
-            'bg-blue-50 text-blue-700 border-b border-blue-200'
-          }`}>
+          <div
+            className={`px-4 py-1.5 text-[11px] font-medium text-center shrink-0 shadow-sm z-20 ${
+              syncStatus.type === "error"
+                ? "bg-red-50 text-red-700 border-b border-red-200"
+                : syncStatus.type === "success"
+                ? "bg-emerald-50 text-emerald-700 border-b border-emerald-200"
+                : syncStatus.type === "warning"
+                ? "bg-amber-50 text-amber-700 border-b border-amber-200"
+                : "bg-blue-50 text-blue-700 border-b border-blue-200"
+            }`}
+          >
             {syncStatus.message}
           </div>
         )}
 
         {/* CHAT AREA */}
         <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4 relative">
-          {messages.length === 0 ? renderEmptyState() : (
+          {messages.length === 0 ? (
+            renderEmptyState()
+          ) : (
             <div className="max-w-4xl mx-auto space-y-4 pb-2">
               {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} group`}>
-                  
+                <div
+                  key={i}
+                  className={`flex ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  } group`}
+                >
                   {/* Avatar for Assistant */}
                   {msg.role === "assistant" && (
-                     <div className="w-6 h-6 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center shrink-0 mr-2.5 mt-1 shadow-sm">
-                       <Sparkles className="w-3 h-3 text-orange-500" />
-                     </div>
+                    <div className="w-6 h-6 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center shrink-0 mr-2.5 mt-1 shadow-sm">
+                      <Sparkles className="w-3 h-3 text-orange-500" />
+                    </div>
                   )}
 
-                  <div className={`relative max-w-[85%] md:max-w-[75%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed shadow-sm ${
-                    msg.role === "user" ? "bg-orange-500 text-white rounded-br-sm" : "bg-white border border-slate-200 text-slate-800 rounded-bl-sm"
-                  }`}>
-                    
+                  <div
+                    className={`relative max-w-[85%] md:max-w-[75%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed shadow-sm ${
+                      msg.role === "user"
+                        ? "bg-orange-500 text-white rounded-br-sm"
+                        : "bg-white border border-slate-200 text-slate-800 rounded-bl-sm"
+                    }`}
+                  >
                     {/* User Copy Button */}
                     {msg.role === "user" && (
                       <button
@@ -583,7 +751,11 @@ export default function SOPIntelligence() {
                         className="absolute top-1.5 -left-10 p-1.5 text-slate-400 hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-all bg-white shadow-sm rounded-lg border border-slate-200"
                         title="Copy question"
                       >
-                        {copiedIndex === i ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedIndex === i ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
                       </button>
                     )}
 
@@ -591,44 +763,63 @@ export default function SOPIntelligence() {
                       msg.type === "suggestions" ? (
                         <div className="flex flex-col space-y-2">
                           <p className="font-medium flex items-center gap-1.5 text-slate-700">
-                            <HelpCircle className="w-4 h-4 text-orange-500" /> {msg.content}
+                            <HelpCircle className="w-4 h-4 text-orange-500" />{" "}
+                            {msg.content}
                           </p>
                           <div className="flex flex-col gap-1.5 mt-1">
                             {msg.suggestions.map((sug, idx) => {
-                              // Check if this suggestion is actually an SOP routing prompt
-                              const matchedSop = availableSops.find(s => s.sopId === sug || s.embeddingId === sug || s.title === sug);
+                              const matchedSop = availableSops.find(
+                                (s) =>
+                                  s.sopId === sug ||
+                                  s.embeddingId === sug ||
+                                  s.title === sug
+                              );
                               return (
                                 <button
                                   key={idx}
                                   onClick={() => {
                                     if (matchedSop) {
-                                      // It is an SOP! Route the *original question* to this specific SOP
                                       setMessages((prev) => [
                                         ...prev,
-                                        { role: "assistant", type: "answer", content: `*Searching for "**${msg.originalQuestion}**" in **${matchedSop.sopId}**...*` }
+                                        {
+                                          role: "assistant",
+                                          type: "answer",
+                                          content: `*Searching for "**${msg.originalQuestion}**" in **${matchedSop.sopId}**...*`,
+                                        },
                                       ]);
-                                      // Call handleAsk with original question and explicit SOP target
-                                      handleAsk(msg.originalQuestion, false, matchedSop.embeddingId);
+                                      handleAsk(
+                                        msg.originalQuestion,
+                                        false,
+                                        matchedSop.embeddingId
+                                      );
                                     } else {
-                                      // It's a regular string suggestion (like "What is the procedure?")
                                       handleAsk(sug, false);
                                     }
                                   }}
                                   disabled={isRagOffline}
                                   className="text-left px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-2"
                                 >
-                                  {/* If it's an SOP, render cleaner without quotes and add an icon to show it's a route */}
-                                  {matchedSop ? <><ArrowRight className="w-3 h-3 text-orange-500" /> {sug}</> : `"${sug}"`}
+                                  {matchedSop ? (
+                                    <>
+                                      <ArrowRight className="w-3 h-3 text-orange-500" />{" "}
+                                      {sug}
+                                    </>
+                                  ) : (
+                                    `"${sug}"`
+                                  )}
                                 </button>
                               );
                             })}
                             {embeddingId !== "global" && (
                               <button
-                                onClick={() => handleAsk(msg.originalQuestion, true)}
+                                onClick={() =>
+                                  handleAsk(msg.originalQuestion, true)
+                                }
                                 disabled={isRagOffline}
                                 className="flex items-center gap-1.5 text-left px-3 py-2 text-xs border border-transparent rounded-lg hover:bg-slate-100 text-slate-500 transition-colors mt-1 disabled:opacity-50"
                               >
-                                <ArrowRight className="w-3 h-3" /> None of these, search anyway.
+                                <ArrowRight className="w-3 h-3" /> None of
+                                these, search anyway.
                               </button>
                             )}
                           </div>
@@ -636,98 +827,251 @@ export default function SOPIntelligence() {
                       ) : (
                         <div className="w-full prose prose-slate prose-sm prose-p:my-1 prose-headings:my-2 prose-li:my-0 prose-ul:my-1 max-w-none prose-p:leading-relaxed prose-a:text-orange-600 text-[13px]">
                           <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              table: ({ children }) => <div className="overflow-x-auto my-3 rounded-md border border-slate-200"><table className="min-w-full divide-y divide-slate-200 m-0">{children}</table></div>,
-                              th: ({ children }) => <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">{children}</th>,
-                              td: ({ children }) => <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">{children}</td>,
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
+  remarkPlugins={[remarkGfm]}
+  components={{
+    // --- NEW: Added Headings & Table styling from the main UI ---
+    h1: ({ children }) => <h1 className="text-base font-bold text-slate-800 mt-5 mb-2 border-b border-slate-200 pb-1">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-[15px] font-bold text-slate-800 mt-4 mb-2">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-[13px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded-md mt-4 mb-2 border border-orange-100">{children}</h3>,
+    table: ({ children }) => <div className="overflow-x-auto my-3 rounded-md border border-slate-200"><table className="min-w-full divide-y divide-slate-200 m-0">{children}</table></div>,
+    th: ({ children }) => <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">{children}</th>,
+    td: ({ children }) => <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">{children}</td>,
 
-                          {/* Render Citations/Pages at bottom of AI message */}
+    // --- UPDATED: Standardized paragraphs and lists ---
+    p: ({ children }) => <p className="mb-3 text-[13px] text-slate-700 leading-relaxed">{children}</p>,
+    ul: ({ children }) => <ul className="list-disc pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5 marker:text-orange-500">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5">{children}</ol>,
+    li: ({ children }) => <li className="pl-1">{children}</li>,
+    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
+
+    // --- KEPT INTACT: Your advanced custom image/video logic ---
+    img: ({ src, alt }) => {
+      const isVideo =
+        alt === "VIDEO" ||
+        src.match(/\.(mp4|webm|ogg)$/i) ||
+        src.includes(".mp4");
+      const mediaObj = {
+        url: src,
+        caption: alt,
+        type: isVideo ? "video" : "image",
+      };
+
+      if (isVideo) {
+        return (
+          <div
+            className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
+            onClick={() => setActiveMedia(mediaObj)}
+          >
+            <div
+              className="absolute inset-0 z-10 bg-transparent"
+              title="Click to expand"
+            />
+            <video
+              src={src}
+              className="w-full max-h-[200px] object-contain bg-black"
+            />
+            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+              <Maximize2
+                size={14}
+                className="text-white"
+              />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+              <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                <Play
+                  fill="currentColor"
+                  size={20}
+                  className="ml-0.5"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          className="my-4 max-w-sm relative group cursor-pointer"
+          onClick={() => setActiveMedia(mediaObj)}
+        >
+          <img
+            src={src}
+            alt={alt}
+            className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
+          />
+          <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
+            <Maximize2
+              size={14}
+              className="text-white"
+            />
+          </div>
+          {alt &&
+            alt !== "image" &&
+            alt !== "Image" &&
+            alt !== "None" && (
+              <div className="mt-1.5 text-xs text-slate-500 text-center italic">
+                {alt}
+              </div>
+            )}
+        </div>
+      );
+    },
+  }}
+>
+  {msg.content}
+</ReactMarkdown>
+
                           {msg.pages && msg.pages.length > 0 && (
                             <div className="mt-3 text-xs text-slate-500 border-t border-slate-100 pt-2">
-                              <strong className="text-slate-600">Referenced Documents & Pages:</strong> {msg.pages.join(' | ')}
+                              <strong className="text-slate-600">
+                                Referenced Documents & Pages:
+                              </strong>{" "}
+                              {msg.pages.join(" | ")}
                             </div>
                           )}
 
-                          {/* Fallback Media Gallery */}
-                          {msg.media && (() => {
-                            const unusedMedia = msg.media.filter((m) => !msg.content.includes(m.url));
-                            if (unusedMedia.length === 0) return null;
-                            return (
-                              <div className="mt-4 border-t border-slate-100 pt-3">
-                                <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">References & Media</p>
-                                <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-200">
-                                  {unusedMedia.map((m, idx) => (
-                                    <div key={idx} className="shrink-0 w-24 h-16 rounded-md overflow-hidden border border-slate-200 relative group cursor-pointer shadow-sm" onClick={() => setActiveMedia(m)}>
-                                      {m.type === "video" || m.url.match(/\.(mp4|webm)$/i) ? (
-                                        <div className="w-full h-full bg-slate-900 flex items-center justify-center"><Play className="text-white/80 w-6 h-6 group-hover:scale-110 transition-transform" /></div>
-                                      ) : (
-                                        <img src={m.url} alt="Reference" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                      )}
-                                    </div>
-                                  ))}
+                          {msg.media &&
+                            (() => {
+                              const unusedMedia = msg.media.filter(
+                                (m) => !msg.content.includes(m.url)
+                              );
+                              if (unusedMedia.length === 0) return null;
+                              return (
+                                <div className="mt-4 border-t border-slate-100 pt-3">
+                                  <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                                    References & Media
+                                  </p>
+                                  <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-slate-200">
+                                    {unusedMedia.map((m, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="shrink-0 w-24 h-16 rounded-md overflow-hidden border border-slate-200 relative group cursor-pointer shadow-sm"
+                                        onClick={() => setActiveMedia(m)}
+                                      >
+                                        {m.type === "video" ||
+                                        m.url.match(/\.(mp4|webm)$/i) ? (
+                                          <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+                                            <Play className="text-white/80 w-6 h-6 group-hover:scale-110 transition-transform" />
+                                          </div>
+                                        ) : (
+                                          <img
+                                            src={m.url}
+                                            alt="Reference"
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                          />
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })()}
+                              );
+                            })()}
 
-                          {/* Admin Verification Banner */}
                           {msg.isApproved && (
                             <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 text-xs flex gap-2 items-start shadow-sm">
                               <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                               <div className="flex flex-col">
-                                <span className="font-semibold text-emerald-800">Verified by Expert</span>
-                                {msg.adminComment && <span className="text-emerald-700 mt-0.5">{msg.adminComment}</span>}
+                                <span className="font-semibold text-emerald-800">
+                                  Verified by Expert
+                                </span>
+                                {msg.adminComment && (
+                                  <span className="text-emerald-700 mt-0.5">
+                                    {msg.adminComment}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           )}
 
-                          {/* Action Bar */}
                           <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2">
                             <div className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                              {msg.source?.includes("cache") && <><AlertCircle className="w-3 h-3" /> Fast Cache Answer</>}
-                            </div>
-                            
-                            <div className="flex items-center gap-1">
-                              {!msg.isApproved && approvingIndex !== i && isAdmin && (
-                                <button onClick={() => { setApprovingIndex(i); setAdminComment(""); }} disabled={isRagOffline} className="px-2 py-1 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1" title="Approve this answer">
-                                  <ThumbsUp className="w-3 h-3" /><span className="text-[11px] font-medium">Approve</span>
-                                </button>
+                              {msg.source?.includes("cache") && (
+                                <>
+                                  <AlertCircle className="w-3 h-3" /> Fast Cache
+                                  Answer
+                                </>
                               )}
-                              <button onClick={() => handleCopy(msg.content, i)} className="px-2 py-1 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors flex items-center gap-1">
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              {!msg.isApproved &&
+                                approvingIndex !== i &&
+                                isAdmin && (
+                                  <button
+                                    onClick={() => {
+                                      setApprovingIndex(i);
+                                      setAdminComment("");
+                                    }}
+                                    disabled={isRagOffline}
+                                    className="px-2 py-1 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1"
+                                    title="Approve this answer"
+                                  >
+                                    <ThumbsUp className="w-3 h-3" />
+                                    <span className="text-[11px] font-medium">
+                                      Approve
+                                    </span>
+                                  </button>
+                                )}
+                              <button
+                                onClick={() => handleCopy(msg.content, i)}
+                                className="px-2 py-1 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors flex items-center gap-1"
+                              >
                                 {copiedIndex === i ? (
-                                  <><Check className="w-3.5 h-3.5 text-emerald-500" /><span className="text-[11px] text-emerald-500 font-medium">Copied</span></>
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                    <span className="text-[11px] text-emerald-500 font-medium">
+                                      Copied
+                                    </span>
+                                  </>
                                 ) : (
-                                  <><Copy className="w-3.5 h-3.5" /><span className="text-[11px] font-medium">Copy</span></>
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span className="text-[11px] font-medium">
+                                      Copy
+                                    </span>
+                                  </>
                                 )}
                               </button>
                             </div>
                           </div>
 
-                          {/* Inline Approval Form */}
-                          {approvingIndex === i && !msg.isApproved && isAdmin && (
-                            <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2 shadow-inner">
-                              <label className="text-xs font-semibold text-slate-700">Add Approval Note (Optional)</label>
-                              <input
-                                type="text"
-                                value={adminComment}
-                                onChange={(e) => setAdminComment(e.target.value)}
-                                className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-md outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
-                                placeholder="e.g., Verified against procedure V2.1"
-                                disabled={isApproving}
-                              />
-                              <div className="flex justify-end gap-1.5 mt-1">
-                                <button onClick={() => setApprovingIndex(null)} className="text-[11px] font-medium text-slate-600 hover:bg-slate-200 px-2.5 py-1.5 rounded-md" disabled={isApproving}>Cancel</button>
-                                <button onClick={() => submitApproval(i, msg)} disabled={isApproving} className="text-[11px] font-medium bg-emerald-600 text-white px-3 py-1.5 rounded-md hover:bg-emerald-700 transition-colors shadow-sm">
-                                  {isApproving ? "Approving..." : "Confirm Verification"}
-                                </button>
+                          {approvingIndex === i &&
+                            !msg.isApproved &&
+                            isAdmin && (
+                              <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2 shadow-inner">
+                                <label className="text-xs font-semibold text-slate-700">
+                                  Add Approval Note (Optional)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={adminComment}
+                                  onChange={(e) =>
+                                    setAdminComment(e.target.value)
+                                  }
+                                  className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-md outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                                  placeholder="e.g., Verified against procedure V2.1"
+                                  disabled={isApproving}
+                                />
+                                <div className="flex justify-end gap-1.5 mt-1">
+                                  <button
+                                    onClick={() => setApprovingIndex(null)}
+                                    className="text-[11px] font-medium text-slate-600 hover:bg-slate-200 px-2.5 py-1.5 rounded-md"
+                                    disabled={isApproving}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => submitApproval(i, msg)}
+                                    disabled={isApproving}
+                                    className="text-[11px] font-medium bg-emerald-600 text-white px-3 py-1.5 rounded-md hover:bg-emerald-700 transition-colors shadow-sm"
+                                  >
+                                    {isApproving
+                                      ? "Approving..."
+                                      : "Confirm Verification"}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </div>
                       )
                     ) : (
@@ -737,7 +1081,6 @@ export default function SOPIntelligence() {
                 </div>
               ))}
 
-              {/* Loading Indicator */}
               {loading && (
                 <div className="flex justify-start">
                   <div className="w-6 h-6 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center shrink-0 mr-2.5 mt-1 shadow-sm">
@@ -755,13 +1098,45 @@ export default function SOPIntelligence() {
           )}
         </div>
 
-        {/* INPUT AREA */}
-        <div className="bg-white px-3 py-3 md:px-6 md:py-4 border-t border-slate-200 shrink-0">
+        {/* 🔥 NEW FIRE INPUT AREA WITH VOICE INTEGRATION 🔥 */}
+        <div className="bg-white px-3 py-3 md:px-6 md:py-4 border-t border-slate-200 shrink-0 relative">
+          {/* English Translation Indicator above input */}
+          {isRecording && translation && (
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 md:left-6 md:translate-x-0 bg-blue-50 text-blue-700 text-xs px-3 py-1.5 rounded-t-lg border border-blue-100 border-b-0 flex items-center gap-2 shadow-sm z-10 transition-all">
+              <Activity size={12} className="animate-pulse" />
+              <span className="truncate max-w-[280px]">
+                Translating: "{translation}"
+              </span>
+            </div>
+          )}
+
           <div className="max-w-4xl mx-auto">
-            <div className={`relative flex items-end rounded-xl border bg-white transition-all shadow-sm ${
-                isRagOffline || isSyncing ? "bg-slate-50 border-slate-200 opacity-70" : "border-slate-300 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-50"
+            <div
+              className={`relative flex items-end gap-2 rounded-xl border px-3 py-2 transition-all shadow-sm ${
+                isRagOffline || isSyncing
+                  ? "bg-slate-50 border-slate-200 opacity-70"
+                  : "bg-white border-slate-300 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500"
               }`}
             >
+              {/* Mic/Stop Button */}
+              <button
+                onClick={toggleRecording}
+                disabled={isRagOffline || isSyncing}
+                className={`flex-shrink-0 p-2 mb-0.5 rounded-full transition-colors duration-200 flex items-center justify-center
+                  ${
+                    isRecording
+                      ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                title={isRecording ? "Stop Recording" : "Start Voice Input"}
+              >
+                {isRecording ? (
+                  <Square size={16} fill="currentColor" />
+                ) : (
+                  <Mic size={16} />
+                )}
+              </button>
+
               <textarea
                 ref={textareaRef}
                 value={question}
@@ -775,27 +1150,50 @@ export default function SOPIntelligence() {
                     handleAsk();
                   }
                 }}
-                placeholder={isRagOffline ? "Service disconnected..." : isSyncing ? "Syncing database, please wait..." : `Ask anything about ${embeddingId === 'global' ? 'all documents' : 'the selected SOP'}...`}
+                placeholder={
+                  isRagOffline
+                    ? "Service disconnected..."
+                    : isSyncing
+                    ? "Syncing database, please wait..."
+                    : isRecording
+                    ? "Listening in your language..."
+                    : `Ask anything about ${
+                        embeddingId === "global"
+                          ? "all documents"
+                          : "the selected SOP"
+                      }...`
+                }
                 disabled={loading || isRagOffline || isSyncing}
                 rows={1}
-                className="w-full bg-transparent py-2.5 pl-4 pr-12 text-[13px] outline-none resize-none overflow-y-auto disabled:cursor-not-allowed max-h-[120px] scrollbar-thin scrollbar-thumb-slate-200"
+                className="flex-1 bg-transparent py-1.5 text-[13px] outline-none resize-none overflow-y-auto disabled:cursor-not-allowed max-h-[120px] scrollbar-thin scrollbar-thumb-slate-200"
               />
-              <button
-                onClick={() => handleAsk()}
-                disabled={loading || !question.trim() || isRagOffline || isSyncing}
-                className="absolute right-1.5 bottom-1.5 rounded-lg bg-orange-500 p-1.5 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors shadow-sm"
-              >
-                <ArrowRight className="h-4 w-4" />
-              </button>
+
+              <div className="flex items-center gap-2 pb-0.5">
+                <button
+                  onClick={() => handleAsk()}
+                  disabled={
+                    loading || !question.trim() || isRagOffline || isSyncing
+                  }
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors shadow-sm shrink-0"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
             </div>
+
             <div className="mt-2 flex justify-center text-[10px] text-slate-400 font-medium">
-              {isRagOffline ? "Chat is unavailable while offline." : "Press Enter to send, Shift + Enter for new line."}
+              {isRagOffline
+                ? "Chat is unavailable while offline."
+                : "Press Enter to send, Shift + Enter for new line. Tap Mic to dictate."}
             </div>
           </div>
         </div>
       </div>
 
-      <MediaModal mediaItem={activeMedia} onClose={() => setActiveMedia(null)} />
+      <MediaModal
+        mediaItem={activeMedia}
+        onClose={() => setActiveMedia(null)}
+      />
     </>
   );
 }

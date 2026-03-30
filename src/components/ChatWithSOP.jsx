@@ -25,7 +25,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MediaModal from "../components/MediaModal";
 import { useServiceStatus } from "../context/ServiceStatusContext";
-import { useSarvamService } from "../services/sarvam_service"; 
+import { useSarvamService } from "../services/sarvam_service";
 
 export default function ChatWithSOP({ sop, onClose }) {
   // --- STATE & REFS ---
@@ -35,9 +35,9 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [loading, setLoading] = useState(false);
   const [activeMedia, setActiveMedia] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
-  
+
   // 🔥 Admin & Approval State
-  const [isAdmin, setIsAdmin] = useState(false); 
+  const [isAdmin, setIsAdmin] = useState(false);
   const [approvingIndex, setApprovingIndex] = useState(null);
   const [adminComment, setAdminComment] = useState("");
   const [isApproving, setIsApproving] = useState(false);
@@ -120,8 +120,8 @@ export default function ChatWithSOP({ sop, onClose }) {
 
   const handleSuggestionClick = (text) => {
     setQuestion(text);
-    handleAsk(text); 
-    
+    handleAsk(text);
+
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -132,7 +132,7 @@ export default function ChatWithSOP({ sop, onClose }) {
   const submitApproval = async (index, msg) => {
     if (isRagOffline) return;
     setIsApproving(true);
-    
+
     try {
       const res = await fetch(`${API_URL}/admin/approve`, {
         method: "POST",
@@ -234,8 +234,13 @@ export default function ChatWithSOP({ sop, onClose }) {
     let englishQuestion = rawInput;
 
     // If they used voice and we have a translation, use the translation for the backend
-    if (!queryOverride && transcript && rawInput.trim() === transcript.trim() && translation) {
-      englishQuestion = translation; 
+    if (
+      !queryOverride &&
+      transcript &&
+      rawInput.trim() === transcript.trim() &&
+      translation
+    ) {
+      englishQuestion = translation;
     }
 
     // Show the NATIVE Question in the chat bubble
@@ -253,9 +258,9 @@ export default function ChatWithSOP({ sop, onClose }) {
       resetVoiceData(); // Clear the Sarvam voice states so the next message is fresh
       if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
-    
+
     setLoading(true);
-    setApprovingIndex(null); 
+    setApprovingIndex(null);
 
     try {
       const res = await fetch(`${API_URL}/user/chat`, {
@@ -264,7 +269,7 @@ export default function ChatWithSOP({ sop, onClose }) {
         body: JSON.stringify({
           user_id: userId,
           document_id: safeDocumentId,
-          question: rawInput, 
+          question: rawInput,
           skip_cache: skipCache,
         }),
       });
@@ -464,104 +469,99 @@ export default function ChatWithSOP({ sop, onClose }) {
                     ) : (
                       <div className="w-full">
                         <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            p: ({ children }) => (
-                              <p className="mb-4 last:mb-0 leading-relaxed">
-                                {children}
-                              </p>
-                            ),
-                            ul: ({ children }) => (
-                              <ul className="list-disc pl-5 space-y-2 mb-4">
-                                {children}
-                              </ul>
-                            ),
-                            ol: ({ children }) => (
-                              <ol className="list-decimal pl-5 space-y-2 mb-4">
-                                {children}
-                              </ol>
-                            ),
-                            li: ({ children }) => <li>{children}</li>,
-                            strong: ({ children }) => (
-                              <strong className="font-semibold text-slate-800">
-                                {children}
-                              </strong>
-                            ),
-                            img: ({ src, alt }) => {
-                              const isVideo =
-                                alt === "VIDEO" ||
-                                src.match(/\.(mp4|webm|ogg)$/i) ||
-                                src.includes(".mp4");
-                              const mediaObj = {
-                                url: src,
-                                caption: alt,
-                                type: isVideo ? "video" : "image",
-                              };
+  remarkPlugins={[remarkGfm]}
+  components={{
+    // --- NEW: Added Headings & Table styling from the main UI ---
+    h1: ({ children }) => <h1 className="text-base font-bold text-slate-800 mt-5 mb-2 border-b border-slate-200 pb-1">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-[15px] font-bold text-slate-800 mt-4 mb-2">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-[13px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded-md mt-4 mb-2 border border-orange-100">{children}</h3>,
+    table: ({ children }) => <div className="overflow-x-auto my-3 rounded-md border border-slate-200"><table className="min-w-full divide-y divide-slate-200 m-0">{children}</table></div>,
+    th: ({ children }) => <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">{children}</th>,
+    td: ({ children }) => <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">{children}</td>,
 
-                              if (isVideo) {
-                                return (
-                                  <div
-                                    className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
-                                    onClick={() => setActiveMedia(mediaObj)}
-                                  >
-                                    <div
-                                      className="absolute inset-0 z-10 bg-transparent"
-                                      title="Click to expand"
-                                    />
-                                    <video
-                                      src={src}
-                                      className="w-full max-h-[200px] object-contain bg-black"
-                                    />
-                                    <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                      <Maximize2
-                                        size={14}
-                                        className="text-white"
-                                      />
-                                    </div>
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                                      <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                                        <Play
-                                          fill="currentColor"
-                                          size={20}
-                                          className="ml-0.5"
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
+    // --- UPDATED: Standardized paragraphs and lists ---
+    p: ({ children }) => <p className="mb-3 text-[13px] text-slate-700 leading-relaxed">{children}</p>,
+    ul: ({ children }) => <ul className="list-disc pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5 marker:text-orange-500">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5">{children}</ol>,
+    li: ({ children }) => <li className="pl-1">{children}</li>,
+    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
 
-                              return (
-                                <div
-                                  className="my-4 max-w-sm relative group cursor-pointer"
-                                  onClick={() => setActiveMedia(mediaObj)}
-                                >
-                                  <img
-                                    src={src}
-                                    alt={alt}
-                                    className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
-                                  />
-                                  <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                    <Maximize2
-                                      size={14}
-                                      className="text-white"
-                                    />
-                                  </div>
-                                  {alt &&
-                                    alt !== "image" &&
-                                    alt !== "Image" &&
-                                    alt !== "None" && (
-                                      <div className="mt-1.5 text-xs text-slate-500 text-center italic">
-                                        {alt}
-                                      </div>
-                                    )}
-                                </div>
-                              );
-                            },
-                          }}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
+    // --- KEPT INTACT: Your advanced custom image/video logic ---
+    img: ({ src, alt }) => {
+      const isVideo =
+        alt === "VIDEO" ||
+        src.match(/\.(mp4|webm|ogg)$/i) ||
+        src.includes(".mp4");
+      const mediaObj = {
+        url: src,
+        caption: alt,
+        type: isVideo ? "video" : "image",
+      };
+
+      if (isVideo) {
+        return (
+          <div
+            className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
+            onClick={() => setActiveMedia(mediaObj)}
+          >
+            <div
+              className="absolute inset-0 z-10 bg-transparent"
+              title="Click to expand"
+            />
+            <video
+              src={src}
+              className="w-full max-h-[200px] object-contain bg-black"
+            />
+            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+              <Maximize2
+                size={14}
+                className="text-white"
+              />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+              <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                <Play
+                  fill="currentColor"
+                  size={20}
+                  className="ml-0.5"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          className="my-4 max-w-sm relative group cursor-pointer"
+          onClick={() => setActiveMedia(mediaObj)}
+        >
+          <img
+            src={src}
+            alt={alt}
+            className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
+          />
+          <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
+            <Maximize2
+              size={14}
+              className="text-white"
+            />
+          </div>
+          {alt &&
+            alt !== "image" &&
+            alt !== "Image" &&
+            alt !== "None" && (
+              <div className="mt-1.5 text-xs text-slate-500 text-center italic">
+                {alt}
+              </div>
+            )}
+        </div>
+      );
+    },
+  }}
+>
+  {msg.content}
+</ReactMarkdown>
 
                         {/* Fallback Media Gallery */}
                         {msg.media &&
@@ -687,7 +687,9 @@ export default function ChatWithSOP({ sop, onClose }) {
                                 disabled={isApproving}
                                 className="text-xs font-medium bg-emerald-500 text-white px-3 py-1.5 rounded hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                               >
-                                {isApproving ? "Approving..." : "Confirm Approval"}
+                                {isApproving
+                                  ? "Approving..."
+                                  : "Confirm Approval"}
                               </button>
                             </div>
                           </div>
@@ -701,22 +703,24 @@ export default function ChatWithSOP({ sop, onClose }) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {!msg.isApproved && approvingIndex !== i && isAdmin && (
-                              <button
-                                onClick={() => {
-                                  setApprovingIndex(i);
-                                  setAdminComment("");
-                                }}
-                                disabled={isRagOffline}
-                                className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
-                                title="Approve this answer"
-                              >
-                                <ThumbsUp className="w-3.5 h-3.5" />
-                                <span className="text-[10px] font-medium">
-                                  Approve
-                                </span>
-                              </button>
-                            )}
+                            {!msg.isApproved &&
+                              approvingIndex !== i &&
+                              isAdmin && (
+                                <button
+                                  onClick={() => {
+                                    setApprovingIndex(i);
+                                    setAdminComment("");
+                                  }}
+                                  disabled={isRagOffline}
+                                  className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                                  title="Approve this answer"
+                                >
+                                  <ThumbsUp className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] font-medium">
+                                    Approve
+                                  </span>
+                                </button>
+                              )}
 
                             <button
                               onClick={() => handleCopy(msg.content, i)}
@@ -810,12 +814,13 @@ export default function ChatWithSOP({ sop, onClose }) {
 
           {/* 🔥 INPUT AREA WITH VOICE BUTTON */}
           <div className="border-t px-6 py-4 bg-white shrink-0 relative">
-            
             {/* English Translation Indicator above input */}
             {isRecording && translation && (
               <div className="absolute -top-7 left-6 bg-blue-50 text-blue-700 text-xs px-3 py-1.5 rounded-t-lg border border-blue-100 border-b-0 flex items-center gap-2 shadow-sm z-10 transition-all">
                 <Activity size={12} className="animate-pulse" />
-                <span className="truncate max-w-[280px]">Translating: "{translation}"</span>
+                <span className="truncate max-w-[280px]">
+                  Translating: "{translation}"
+                </span>
               </div>
             )}
 
@@ -839,7 +844,11 @@ export default function ChatWithSOP({ sop, onClose }) {
                   }`}
                 title={isRecording ? "Stop Recording" : "Start Voice Input"}
               >
-                {isRecording ? <Square size={16} fill="currentColor" /> : <Mic size={16} />}
+                {isRecording ? (
+                  <Square size={16} fill="currentColor" />
+                ) : (
+                  <Mic size={16} />
+                )}
               </button>
 
               <textarea
@@ -856,7 +865,7 @@ export default function ChatWithSOP({ sop, onClose }) {
                 placeholder={
                   isRagOffline
                     ? "Service disconnected..."
-                    : isRecording 
+                    : isRecording
                     ? "Listening in your language..."
                     : `Ask about ${sop?.id ?? "this SOP"}...`
                 }
@@ -881,7 +890,6 @@ export default function ChatWithSOP({ sop, onClose }) {
                 : "Press Enter to send, Shift+Enter for new line. Tap Mic to dictate in your native language."}
             </p>
           </div>
-
         </div>
       </div>
 

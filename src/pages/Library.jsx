@@ -15,7 +15,6 @@ import FDAComplianceAnalysis from "../components/FDAComplianceAnalysis";
 import ChatWithSOP from "../components/ChatWithSOP";
 import AddSOPModal from "../components/AddSOPModal";
 import EditSOPModal from "../components/EditSOPModal";
-import SOPFlowchart from "../components/SOPFlowchart";
 import DataExtractor from "../sop-data-extractor/DataExtractor";
 import PDFViewerModal from "../components/PDFViewerModal";
 import BuildRag from "../components/BuildRag"; // <-- NEW IMPORT
@@ -43,7 +42,7 @@ export default function Library() {
     setLoading(true);
     try {
       const token = sessionStorage.getItem("token");
-      const response = await fetch(`${API_URL}/api/sops`, {
+      const response = await fetch(`${API_URL}/api/sops/metadata`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

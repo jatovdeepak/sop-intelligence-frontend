@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { X, Database, FileJson, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import ChatWithSOP from "../components/ChatWithSOP";
 import DataExtractor from "../sop-data-extractor/DataExtractor";
@@ -8,100 +8,93 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   const [localSop, setLocalSop] = useState(sop);
+  const [isLoading, setIsLoading] = useState(true);
+  const [view, setView] = useState("loading");
 
-  // 1. Determine if we are still waiting for the real data to arrive from the API
-  const [isLoading, setIsLoading] = useState(!sop || (!sop._id && !sop.sopId));
-
-  // 2. Sync late-arriving prop data and turn off loading state
-  useEffect(() => {
-    if (sop && (sop._id || sop.sopId)) {
-      setLocalSop(sop);
-      setIsLoading(false);
-    }
-  }, [sop]);
-
-  const checkIsDataEmpty = (dataToCheck) => {
+  // --- 1. Helper: Data Validation ---
+  const checkIsDataEmpty = useCallback((dataToCheck) => {
     if (!dataToCheck) return true;
     if (Array.isArray(dataToCheck) && dataToCheck.length === 0) return true;
-    
     if (typeof dataToCheck === "object" && !Array.isArray(dataToCheck)) {
       if (Object.keys(dataToCheck).length === 0 && !dataToCheck.sections) return true;
-      
       if (dataToCheck.sections && Array.isArray(dataToCheck.sections)) {
         if (dataToCheck.sections.length === 0) return true;
         if (dataToCheck.sections.length === 1) {
-          const firstSection = dataToCheck.sections[0];
-          if (!firstSection.title && !firstSection.content && (!firstSection.children || firstSection.children.length === 0)) {
-            return true;
-          }
+          const s = dataToCheck.sections[0];
+          return !s.title && !s.content && (!s.children || s.children.length === 0);
         }
       }
     }
     return false;
-  };
+  }, []);
 
-  const isDataEmpty = checkIsDataEmpty(localSop?.data);
-  const isRagReady = localSop?.embeddingStatus === "completed";
-  
-  // Compare timestamps for initial load
-  const extractedTime = new Date(localSop?.lastExtractedTime || 0).getTime();
-  const ragTime = new Date(localSop?.lastRagBuildTime || 0).getTime();
-  const needsRebuild = extractedTime > ragTime;
+  // --- 2. Logic: Fetch Full SOP Data ---
+  const fetchSOPDetails = async (isInitial = false) => {
+    if (!isInitial) setIsLoading(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const targetId = sop._id || localSop._id;
 
-  // 3. Start with a "loading" view if data isn't here yet
-  const [view, setView] = useState(() => {
-    if (isLoading) return "loading";
-    if (isDataEmpty) return "setup";
-    if (needsRebuild || !isRagReady) return "rag";
-    return "chat";
-  });
+      // Fetch from the optimized /data endpoint
+      const response = await fetch(`${API_URL}/api/sops/${targetId}/data`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-  // 4. Once loading is done (or data changes), route to the correct view automatically
-  useEffect(() => {
-    if (!isLoading) {
-      if (isDataEmpty) {
-        setView(prev => (prev === "extractor" ? "extractor" : "setup"));
+      if (!response.ok) throw new Error("Failed to fetch SOP data");
+
+      const result = await response.json();
+      
+      // Merge fetched data with existing sop metadata
+      const mergedSop = { 
+        ...sop, 
+        ...localSop, 
+        data: result.data || result 
+      };
+
+      setLocalSop(mergedSop);
+      
+      // Determine logical view based on fresh data
+      const isEmpty = checkIsDataEmpty(mergedSop.data);
+      const isRagReady = mergedSop.embeddingStatus === "completed";
+      const extractedTime = new Date(mergedSop.lastExtractedTime || 0).getTime();
+      const ragTime = new Date(mergedSop.lastRagBuildTime || 0).getTime();
+      const needsRebuild = extractedTime > ragTime;
+
+      if (isEmpty) {
+        setView("setup");
       } else if (needsRebuild || !isRagReady) {
-        setView(prev => (prev === "extractor" || prev === "rag" ? prev : "rag"));
+        setView("rag");
       } else {
         setView("chat");
       }
-    }
-  }, [isLoading, isDataEmpty, needsRebuild, isRagReady]);
 
-  // Pull the freshest data when Extractor or RAG closes
-  const handleUpdateClose = async () => {
-    try {
-      const token = sessionStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/sops/${localSop._id || localSop.sopId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (res.ok) {
-        const updatedSop = await res.json();
-        setLocalSop(updatedSop); 
-        // Note: The useEffect above will handle moving the user to the correct view!
-      } else {
-        setView("setup");
-      }
     } catch (err) {
-      console.error("Failed to fetch updated SOP:", err);
+      console.error("Error fetching SOP details:", err);
       setView("setup");
+    } finally {
+      setIsLoading(false);
+      if (!isInitial && onRefresh) onRefresh();
     }
-
-    if (onRefresh) onRefresh(); 
   };
 
-  // --- RENDER VIEWS ---
+  // Initial Fetch on Mount
+  useEffect(() => {
+    fetchSOPDetails(true);
+  }, []);
 
-  // 5. Render Loading Screen while waiting for API
+  const handleUpdateClose = () => {
+    fetchSOPDetails(false);
+  };
+
+  // --- RENDER LOGIC ---
+
   if (isLoading || view === "loading") {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
         <div className="flex flex-col items-center justify-center bg-white p-8 rounded-2xl shadow-xl min-w-[300px]" onClick={e => e.stopPropagation()}>
           <Loader2 className="h-10 w-10 text-orange-500 animate-spin mb-4" />
-          <h2 className="text-lg font-semibold text-slate-800">Loading SOP...</h2>
-          <p className="text-sm text-slate-500 mt-1">Fetching latest data</p>
+          <h2 className="text-lg font-semibold text-slate-800">Syncing Intelligence...</h2>
+          <p className="text-sm text-slate-500 mt-1">Preparing chat context</p>
         </div>
       </div>
     );
@@ -129,6 +122,13 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
     return <ChatWithSOP sop={localSop} onClose={onClose} />;
   }
 
+  // Setup / Dashboard View
+  const isDataEmpty = checkIsDataEmpty(localSop?.data);
+  const isRagReady = localSop?.embeddingStatus === "completed";
+  const extractedTime = new Date(localSop?.lastExtractedTime || 0).getTime();
+  const ragTime = new Date(localSop?.lastRagBuildTime || 0).getTime();
+  const needsRebuild = extractedTime > ragTime;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="flex h-[90vh] w-[900px] flex-col rounded-2xl bg-white shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -138,7 +138,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500 text-white font-bold">✨</div>
             <div>
-              <h2 className="text-base font-semibold">SOP Preparation</h2>
+              <h2 className="text-base font-semibold">AI Chat Preparation</h2>
               <p className="text-sm text-slate-500">{localSop?.sopId ?? "SOP"} · Setup Required</p>
             </div>
           </div>
@@ -218,7 +218,7 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
               </button>
             </div>
 
-            {/* Jump to Chat Button */}
+            {/* Launch Chat Button */}
             {!isDataEmpty && isRagReady && !needsRebuild && (
               <button 
                 onClick={() => setView("chat")} 

@@ -827,99 +827,143 @@ export default function SOPIntelligence() {
                       ) : (
                         <div className="w-full prose prose-slate prose-sm prose-p:my-1 prose-headings:my-2 prose-li:my-0 prose-ul:my-1 max-w-none prose-p:leading-relaxed prose-a:text-orange-600 text-[13px]">
                           <ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  components={{
-    // --- NEW: Added Headings & Table styling from the main UI ---
-    h1: ({ children }) => <h1 className="text-base font-bold text-slate-800 mt-5 mb-2 border-b border-slate-200 pb-1">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-[15px] font-bold text-slate-800 mt-4 mb-2">{children}</h2>,
-    h3: ({ children }) => <h3 className="text-[13px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded-md mt-4 mb-2 border border-orange-100">{children}</h3>,
-    table: ({ children }) => <div className="overflow-x-auto my-3 rounded-md border border-slate-200"><table className="min-w-full divide-y divide-slate-200 m-0">{children}</table></div>,
-    th: ({ children }) => <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">{children}</th>,
-    td: ({ children }) => <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">{children}</td>,
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              // --- NEW: Added Headings & Table styling from the main UI ---
+                              h1: ({ children }) => (
+                                <h1 className="text-base font-bold text-slate-800 mt-5 mb-2 border-b border-slate-200 pb-1">
+                                  {children}
+                                </h1>
+                              ),
+                              h2: ({ children }) => (
+                                <h2 className="text-[15px] font-bold text-slate-800 mt-4 mb-2">
+                                  {children}
+                                </h2>
+                              ),
+                              h3: ({ children }) => (
+                                <h3 className="text-[13px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded-md mt-4 mb-2 border border-orange-100">
+                                  {children}
+                                </h3>
+                              ),
+                              table: ({ children }) => (
+                                <div className="overflow-x-auto my-3 rounded-md border border-slate-200">
+                                  <table className="min-w-full divide-y divide-slate-200 m-0">
+                                    {children}
+                                  </table>
+                                </div>
+                              ),
+                              th: ({ children }) => (
+                                <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                                  {children}
+                                </th>
+                              ),
+                              td: ({ children }) => (
+                                <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">
+                                  {children}
+                                </td>
+                              ),
 
-    // --- UPDATED: Standardized paragraphs and lists ---
-    p: ({ children }) => <p className="mb-3 text-[13px] text-slate-700 leading-relaxed">{children}</p>,
-    ul: ({ children }) => <ul className="list-disc pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5 marker:text-orange-500">{children}</ul>,
-    ol: ({ children }) => <ol className="list-decimal pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5">{children}</ol>,
-    li: ({ children }) => <li className="pl-1">{children}</li>,
-    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
+                              // --- UPDATED: Standardized paragraphs and lists ---
+                              p: ({ children }) => (
+                                <p className="mb-3 text-[13px] text-slate-700 leading-relaxed">
+                                  {children}
+                                </p>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5 marker:text-orange-500">
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5">
+                                  {children}
+                                </ol>
+                              ),
+                              li: ({ children }) => (
+                                <li className="pl-1">{children}</li>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-bold text-slate-900">
+                                  {children}
+                                </strong>
+                              ),
 
-    // --- KEPT INTACT: Your advanced custom image/video logic ---
-    img: ({ src, alt }) => {
-      const isVideo =
-        alt === "VIDEO" ||
-        src.match(/\.(mp4|webm|ogg)$/i) ||
-        src.includes(".mp4");
-      const mediaObj = {
-        url: src,
-        caption: alt,
-        type: isVideo ? "video" : "image",
-      };
+                              // --- KEPT INTACT: Your advanced custom image/video logic ---
+                              img: ({ src, alt }) => {
+                                const isVideo =
+                                  alt === "VIDEO" ||
+                                  src.match(/\.(mp4|webm|ogg)$/i) ||
+                                  src.includes(".mp4");
+                                const mediaObj = {
+                                  url: src,
+                                  caption: alt,
+                                  type: isVideo ? "video" : "image",
+                                };
 
-      if (isVideo) {
-        return (
-          <div
-            className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
-            onClick={() => setActiveMedia(mediaObj)}
-          >
-            <div
-              className="absolute inset-0 z-10 bg-transparent"
-              title="Click to expand"
-            />
-            <video
-              src={src}
-              className="w-full max-h-[200px] object-contain bg-black"
-            />
-            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-              <Maximize2
-                size={14}
-                className="text-white"
-              />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                <Play
-                  fill="currentColor"
-                  size={20}
-                  className="ml-0.5"
-                />
-              </div>
-            </div>
-          </div>
-        );
-      }
+                                if (isVideo) {
+                                  return (
+                                    <div
+                                      className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
+                                      onClick={() => setActiveMedia(mediaObj)}
+                                    >
+                                      <div
+                                        className="absolute inset-0 z-10 bg-transparent"
+                                        title="Click to expand"
+                                      />
+                                      <video
+                                        src={src}
+                                        className="w-full max-h-[200px] object-contain bg-black"
+                                      />
+                                      <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                                        <Maximize2
+                                          size={14}
+                                          className="text-white"
+                                        />
+                                      </div>
+                                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                                        <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                                          <Play
+                                            fill="currentColor"
+                                            size={20}
+                                            className="ml-0.5"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
 
-      return (
-        <div
-          className="my-4 max-w-sm relative group cursor-pointer"
-          onClick={() => setActiveMedia(mediaObj)}
-        >
-          <img
-            src={src}
-            alt={alt}
-            className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
-          />
-          <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
-            <Maximize2
-              size={14}
-              className="text-white"
-            />
-          </div>
-          {alt &&
-            alt !== "image" &&
-            alt !== "Image" &&
-            alt !== "None" && (
-              <div className="mt-1.5 text-xs text-slate-500 text-center italic">
-                {alt}
-              </div>
-            )}
-        </div>
-      );
-    },
-  }}
->
-  {msg.content}
-</ReactMarkdown>
+                                return (
+                                  <div
+                                    className="my-4 max-w-sm relative group cursor-pointer"
+                                    onClick={() => setActiveMedia(mediaObj)}
+                                  >
+                                    <img
+                                      src={src}
+                                      alt={alt}
+                                      className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
+                                    />
+                                    <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                      <Maximize2
+                                        size={14}
+                                        className="text-white"
+                                      />
+                                    </div>
+                                    {alt &&
+                                      alt !== "image" &&
+                                      alt !== "Image" &&
+                                      alt !== "None" && (
+                                        <div className="mt-1.5 text-xs text-slate-500 text-center italic">
+                                          {alt}
+                                        </div>
+                                      )}
+                                  </div>
+                                );
+                              },
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
 
                           {msg.pages && msg.pages.length > 0 && (
                             <div className="mt-3 text-xs text-slate-500 border-t border-slate-100 pt-2">

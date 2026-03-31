@@ -11,6 +11,12 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState("loading");
 
+  // --- MAGIC LOOP BREAKER: Trust optimistic data and force route to chat ---
+  const handleRagSuccess = useCallback((optimisticData) => {
+    setLocalSop((prev) => ({ ...prev, ...optimisticData }));
+    setView("chat");
+  }, []);
+
   // --- 1. Helper: Data Validation ---
   const checkIsDataEmpty = useCallback((dataToCheck) => {
     if (!dataToCheck) return true;
@@ -35,31 +41,39 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
       const token = sessionStorage.getItem("token");
       const targetId = sop._id || localSop._id;
 
-      // Fetch from the optimized /data endpoint
-      const response = await fetch(`${API_URL}/api/sops/${targetId}/data`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const [dataResponse, metaResponse] = await Promise.all([
+        fetch(`${API_URL}/api/sops/${targetId}/data`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/api/sops/${targetId}/metadata`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      ]);
 
-      if (!response.ok) throw new Error("Failed to fetch SOP data");
+      if (!dataResponse.ok || !metaResponse.ok) {
+        throw new Error("Failed to fetch SOP details");
+      }
 
-      const result = await response.json();
+      const dataResult = await dataResponse.json();
+      const metaResult = await metaResponse.json();
       
-      // Merge fetched data with existing sop metadata
       const mergedSop = { 
         ...sop, 
         ...localSop, 
-        data: result.data || result 
+        ...metaResult, 
+        data: dataResult.data || dataResult 
       };
 
       setLocalSop(mergedSop);
       
-      // Determine logical view based on fresh data
       const isEmpty = checkIsDataEmpty(mergedSop.data);
       const isRagReady = mergedSop.embeddingStatus === "completed";
-      const extractedTime = new Date(mergedSop.lastExtractedTime || 0).getTime();
-      const ragTime = new Date(mergedSop.lastRagBuildTime || 0).getTime();
-      const needsRebuild = extractedTime > ragTime;
-
+      
+      // 🔥 LOGIC UPDATE: Checking the "Pending" status directly
+      const isPending = mergedSop.embeddingStatus === "Pending";
+   
+      // Needs rebuild if explicitly pending, or as a fallback if extraction time is newer
+      const needsRebuild = isPending;
       if (isEmpty) {
         setView("setup");
       } else if (needsRebuild || !isRagReady) {
@@ -77,9 +91,9 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
     }
   };
 
-  // Initial Fetch on Mount
   useEffect(() => {
     fetchSOPDetails(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUpdateClose = () => {
@@ -87,6 +101,14 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   };
 
   // --- RENDER LOGIC ---
+  const isDataEmpty = checkIsDataEmpty(localSop?.data);
+  const isRagReady = localSop?.embeddingStatus === "completed";
+  const isPending = localSop?.embeddingStatus === "Pending";
+  const extractedTime = new Date(localSop?.lastExtractedTime || 0).getTime();
+  const ragTime = new Date(localSop?.lastRagBuildTime || 0).getTime();
+  
+  // 🔥 Same updated logic for the render body
+  const needsRebuild = isPending || (extractedTime > ragTime);
 
   if (isLoading || view === "loading") {
     return (
@@ -113,7 +135,12 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   if (view === "rag") {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <BuildRag sop={localSop} onClose={handleUpdateClose} />
+        <BuildRag 
+          sop={localSop} 
+          onClose={() => setView("setup")} 
+          onSuccess={handleRagSuccess} // Skip the DB check and go straight to chat
+          forceRebuild={!needsRebuild && isRagReady} 
+        />
       </div>
     );
   }
@@ -121,13 +148,6 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
   if (view === "chat") {
     return <ChatWithSOP sop={localSop} onClose={onClose} />;
   }
-
-  // Setup / Dashboard View
-  const isDataEmpty = checkIsDataEmpty(localSop?.data);
-  const isRagReady = localSop?.embeddingStatus === "completed";
-  const extractedTime = new Date(localSop?.lastExtractedTime || 0).getTime();
-  const ragTime = new Date(localSop?.lastRagBuildTime || 0).getTime();
-  const needsRebuild = extractedTime > ragTime;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -200,7 +220,8 @@ export default function SOPChatLayout({ sop, onClose, onRefresh }) {
                       isRagReady ? "bg-emerald-100 text-emerald-700" :
                       "bg-slate-100 text-slate-500"
                     }`}>
-                      {needsRebuild ? "Out of Date" : (localSop?.embeddingStatus || "Not Embedded")}
+                      {/* 🔥 Dynamically change text based on status */}
+                      {needsRebuild ? (isPending ? "Pending Rebuild" : "Out of Date") : (localSop?.embeddingStatus || "Not Embedded")}
                     </span>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TableEditor from "./TableEditor";
 import FlowchartEditor from "./FlowchartEditor";
@@ -6,123 +6,49 @@ import MediaEditor from "./MediaEditor";
 
 // --- Icons ---
 const TrashIcon = () => (
-  <svg
-    className="w-3 h-3"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-    />
+  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
   </svg>
 );
 
 const CopyIcon = () => (
-  <svg
-    className="w-3 h-3 mr-1"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-    />
+  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
   </svg>
 );
 
 const DownloadIcon = () => (
-  <svg
-    className="w-3 h-3 mr-1"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-    />
+  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
   </svg>
 );
 
 const ImportIcon = () => (
-  <svg
-    className="w-3 h-3 mr-1"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-    />
+  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
   </svg>
 );
 
 const ChevronDownIcon = () => (
-  <svg
-    className="w-4 h-4"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M19 9l-7 7-7-7"
-    />
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
   </svg>
 );
 
 const ChevronRightIcon = () => (
-  <svg
-    className="w-4 h-4"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="M9 5l7 7-7 7"
-    />
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
   </svg>
 );
 
 const PlusIcon = () => (
-  <svg
-    className="w-3 h-3"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M12 4.5v15m7.5-7.5h-15"
-    />
+  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
   </svg>
 );
 
 const GripIcon = () => (
-  <svg
-    className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-  >
+  <svg className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing" viewBox="0 0 24 24" fill="currentColor">
     <circle cx="9" cy="6" r="1.5" />
     <circle cx="15" cy="6" r="1.5" />
     <circle cx="9" cy="12" r="1.5" />
@@ -133,23 +59,15 @@ const GripIcon = () => (
 );
 
 const COLOR_OPTIONS = [
-  "blue",
-  "purple",
-  "amber",
-  "emerald",
-  "rose",
-  "cyan",
-  "indigo",
-  "orange",
-  "gray",
+  "blue", "purple", "amber", "emerald", "rose", "cyan", "indigo", "orange", "gray",
 ];
 
 // --- UID Generator for stable React mapping ---
-const generateUid = () =>
-  Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+const generateUid = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 
 // Ensures all incoming data has stable internal IDs
 const ensureUids = (nodes) => {
+  if (!nodes || !Array.isArray(nodes)) return [];
   return nodes.map((node) => ({
     ...node,
     uid: node.uid || generateUid(),
@@ -321,8 +239,8 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
       tables: [
         ...(n.tables || []),
         {
-          title: "", // New title field
-          data: [    // Rows moved inside 'data'
+          title: "",
+          data: [
             ["", ""],
             ["", ""],
           ]
@@ -353,16 +271,8 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
           `}
         >
           {/* STICKY HEADER & ACTION BAR */}
-          <div
-            className={`top-0 z-10 bg-white transition-all ${
-              isCollapsed ? "rounded" : "rounded-t border-b border-gray-200"
-            }`}
-          >
-            <div
-              className={`flex gap-1 p-2 items-center bg-gray-50 ${
-                isCollapsed ? "rounded" : "rounded-t"
-              }`}
-            >
+          <div className={`top-0 z-10 bg-white transition-all ${isCollapsed ? "rounded" : "rounded-t border-b border-gray-200"}`}>
+            <div className={`flex gap-1 p-2 items-center bg-gray-50 ${isCollapsed ? "rounded" : "rounded-t"}`}>
               {/* Drag Handle Area */}
               <div
                 {...provided.dragHandleProps}
@@ -416,12 +326,6 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
                 >
                   + Add Sub-section
                 </button>
-                {/* <button
-                  onClick={() => onAddSibling(node.uid)}
-                  className="bg-slate-600 text-white px-2 py-1 rounded text-[10px] hover:bg-slate-700 shadow-sm transition-colors"
-                >
-                  + Add Sibling Section
-                </button> */}
                 <button
                   onClick={handleAddMetadata}
                   className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors"
@@ -464,17 +368,13 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
                           className="border border-gray-300 p-1 w-1/3 rounded text-xs focus:outline-blue-500"
                           placeholder="Key (e.g., Sub-system Code)"
                           value={meta.key}
-                          onChange={(e) =>
-                            handleMetadataChange(i, "key", e.target.value)
-                          }
+                          onChange={(e) => handleMetadataChange(i, "key", e.target.value)}
                         />
                         <input
                           className="border border-gray-300 p-1 flex-1 rounded text-xs focus:outline-blue-500"
                           placeholder="Value"
                           value={meta.value}
-                          onChange={(e) =>
-                            handleMetadataChange(i, "value", e.target.value)
-                          }
+                          onChange={(e) => handleMetadataChange(i, "value", e.target.value)}
                         />
                         <button
                           onClick={() => handleDeleteMetadata(i)}
@@ -521,13 +421,12 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`mx-2 rounded transition-all duration-200
-          ${hasChildren ? "mt-2 mb-2 border-l-2 pl-2 border-blue-200" : ""}
-          ${
-            dropSnapshot.isDraggingOver
-              ? "min-h-[50px] mt-2 mb-2 border-l-2 pl-2 border-indigo-400 bg-indigo-50/50"
-              : "min-h-[8px] pb-1" // Shrinks to almost nothing when not dragging
-          }
-        `}
+                        ${hasChildren ? "mt-2 mb-2 border-l-2 pl-2 border-blue-200" : ""}
+                        ${dropSnapshot.isDraggingOver
+                          ? "min-h-[50px] mt-2 mb-2 border-l-2 pl-2 border-indigo-400 bg-indigo-50/50"
+                          : "min-h-[8px] pb-1"
+                        }
+                      `}
                     >
                       {(node.children || []).map((child, i) => (
                         <RecursiveNode
@@ -562,28 +461,139 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
   );
 };
 
+
 // --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+  // States
   const [pdfFile, setPdfFile] = useState(null);
-  const [isPdfLoading, setIsPdfLoading] = useState(!!sop?.pdfPathBase64);
+  const [documentData, setDocumentData] = useState(null);
+  
+  const [isPdfLoading, setIsPdfLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  
   const [showJson, setShowJson] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [saveStatus, setSaveStatus] = useState("idle");
   const fileInputRef = useRef(null);
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
+  // --- Utility: Check if data is empty ---
+  const checkIsDataEmpty = useCallback((dataToCheck) => {
+    if (!dataToCheck) return true;
+    if (Array.isArray(dataToCheck)) return dataToCheck.length === 0;
+
+    const sections = dataToCheck.sections;
+    if (!sections || !Array.isArray(sections) || sections.length === 0) return true;
+
+    if (sections.length === 1) {
+      const s = sections[0];
+      const hasNoContent = !s.title && !s.content && (!s.children || s.children.length === 0);
+      return hasNoContent;
+    }
+
+    return false;
+  }, []);
+
+  // --- EFFECT: Fetch/Load Document Data ---
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDataAsync = async () => {
+      setIsDataLoading(true);
+      try {
+        let activeData = sop?.data;
+        const targetId = sop?._id || sop?.sopId;
+
+        // If data is empty and we have an ID, fetch from backend
+        if (checkIsDataEmpty(activeData) && targetId) {
+          const token = sessionStorage.getItem("token");
+          const response = await fetch(`${API_URL}/api/sops/${targetId}/data`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            // Assign from common JSON response structures
+            activeData = result.data || result;
+          } else {
+            console.error("Failed to fetch fresh SOP data structure.");
+          }
+        }
+
+        if (isMounted) {
+          if (!checkIsDataEmpty(activeData)) {
+            // Found valid data: Hydrate with UIDs
+            setDocumentData({
+              metadata: activeData.metadata || [],
+              filters: activeData.filters || [],
+              sections: ensureUids(activeData.sections),
+            });
+          } else {
+            // Failed to find or fetch valid data: setup skeleton
+            setDocumentData({
+              metadata: [],
+              filters: [],
+              sections: [
+                {
+                  uid: generateUid(),
+                  id: "1.0",
+                  title: "",
+                  content: "",
+                  pageNumbers: "",
+                  metadata: [],
+                  flowcharts: [],
+                  tables: [],
+                  media: [],
+                  children: [],
+                },
+              ],
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading SOP data:", error);
+      } finally {
+        if (isMounted) setIsDataLoading(false);
+      }
+    };
+
+    loadDataAsync();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sop, API_URL, checkIsDataEmpty]);
+
+  // --- EFFECT: Fetch/Load PDF Base64 ---
   useEffect(() => {
     let objectUrl = null;
     let isMounted = true;
 
     const loadPdfAsync = async () => {
-      if (sop?.pdfPathBase64) {
-        setIsPdfLoading(true);
-        try {
+      setIsPdfLoading(true);
+      try {
+        let base64String = sop?.pdfPathBase64;
+        const targetId = sop?._id || sop?.sopId;
+
+        // Fetch PDF base64 if it's missing from the initial SOP object
+        if (!base64String && targetId) {
+          const token = sessionStorage.getItem("token");
+          const response = await fetch(`${API_URL}/api/sops/${targetId}/pdf-base64`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            base64String = result.pdfPathBase64 || result.data || result.pdfBase64;
+          }
+        }
+
+        if (base64String && isMounted) {
           const prefix = "data:application/pdf;base64,";
-          const dataUri = sop.pdfPathBase64.startsWith("data:")
-            ? sop.pdfPathBase64
-            : prefix + sop.pdfPathBase64;
+          const dataUri = base64String.startsWith("data:")
+            ? base64String
+            : prefix + base64String;
 
           const response = await fetch(dataUri);
           const blob = await response.blob();
@@ -592,12 +602,12 @@ export default function DataExtractor({ sop, onClose }) {
             objectUrl = URL.createObjectURL(blob);
             setPdfFile(objectUrl);
           }
-        } catch (error) {
-          console.error("Failed to parse PDF Base64 data:", error);
-        } finally {
-          if (isMounted) {
-            setIsPdfLoading(false);
-          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch/parse PDF Base64 data:", error);
+      } finally {
+        if (isMounted) {
+          setIsPdfLoading(false);
         }
       }
     };
@@ -610,76 +620,46 @@ export default function DataExtractor({ sop, onClose }) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [sop]);
+  }, [sop, API_URL]);
 
-  const [documentData, setDocumentData] = useState(() => {
-    if (sop?.data?.sections) {
-      return {
-        ...sop.data,
-        sections: ensureUids(sop.data.sections),
-      };
-    }
 
-    return {
-      metadata: [],
-      filters: [],
-      sections: [
-        {
-          uid: generateUid(),
-          id: "1.0",
-          title: "",
-          content: "",
-          pageNumbers: "",
-          metadata: [],
-          flowcharts: [],
-          tables: [],
-          media: [],
-          children: [],
+// --- EFFECT: Auto-Save ---
+useEffect(() => {
+  // Prevent saving if data is still loading or documentData isn't hydrated yet
+  if (isDataLoading || !documentData || !sop?._id) return;
+
+  const timer = setTimeout(async () => {
+    setSaveStatus("saving");
+
+    try {
+      const token = sessionStorage.getItem("token");
+      const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      ],
-    };
-  });
+        body: JSON.stringify({
+          data: documentData,
+          lastExtractedTime: new Date().toISOString(),
+          embeddingStatus: "Pending" // 🔥 FLAG IT AS PENDING HERE!
+        }),
+      });
 
-  useEffect(() => {
-    if (!documentData.filters) {
-      setDocumentData((prev) => ({ ...prev, filters: [] }));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!sop?._id) return;
-
-    const timer = setTimeout(async () => {
-      setSaveStatus("saving");
-
-      try {
-        const token = sessionStorage.getItem("token");
-        const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            data: documentData,
-            lastExtractedTime: new Date().toISOString(),
-          }),
-        });
-
-        if (response.ok) {
-          setLastSaved(new Date());
-          setSaveStatus("saved");
-        } else {
-          setSaveStatus("error");
-        }
-      } catch (err) {
-        console.error("Auto-save failed:", err);
+      if (response.ok) {
+        setLastSaved(new Date());
+        setSaveStatus("saved");
+      } else {
         setSaveStatus("error");
       }
-    }, 1500);
+    } catch (err) {
+      console.error("Auto-save failed:", err);
+      setSaveStatus("error");
+    }
+  }, 1500);
 
-    return () => clearTimeout(timer);
-  }, [documentData, sop, API_URL]);
+  return () => clearTimeout(timer);
+}, [documentData, isDataLoading, sop, API_URL]);
 
   const handlePdfUpload = (e) => {
     const file = e.target.files?.[0];
@@ -729,10 +709,7 @@ export default function DataExtractor({ sop, onClose }) {
   const handleAddFilter = () => {
     setDocumentData((prev) => ({
       ...prev,
-      filters: [
-        ...(prev.filters || []),
-        { label: "", keywords: [], color: "blue" },
-      ],
+      filters: [...(prev.filters || []), { label: "", keywords: [], color: "blue" }],
     }));
   };
 
@@ -804,24 +781,18 @@ export default function DataExtractor({ sop, onClose }) {
     }));
   };
 
-  // --- NEW: Atlassian Drag Context Handler ---
+  // --- Drag Context Handler ---
   const handleDragEnd = (result) => {
     const { source, destination, draggableId } = result;
 
     if (!destination) return;
-    if (
-      source.droppableId === destination.droppableId &&
-      source.index === destination.index
-    )
+    if (source.droppableId === destination.droppableId && source.index === destination.index)
       return;
 
     const dropUid = destination.droppableId.replace("drop-", "");
 
     setDocumentData((prev) => {
-      if (
-        dropUid !== "root" &&
-        isDescendant(prev.sections, draggableId, dropUid)
-      ) {
+      if (dropUid !== "root" && isDescendant(prev.sections, draggableId, dropUid)) {
         alert("Cannot drop a section into its own sub-section.");
         return prev;
       }
@@ -903,29 +874,15 @@ export default function DataExtractor({ sop, onClose }) {
   };
 
   const downloadJson = () => {
-    // 1. Prepare the data string
-    const dataStr =
-      "data:text/json;charset=utf-8," +
-      encodeURIComponent(JSON.stringify(documentData, null, 2));
-    
-    // 2. Create the hidden anchor element
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(documentData, null, 2));
     const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-  
-    // 3. Use sop.sopId for the filename
-    // We'll use a fallback just in case sopId is missing
-    const idSuffix = sop?.sopId 
-      ? sop.sopId.toString().replace(/[^a-z0-9]/gi, "_") 
-      : "default";
-      
+    const idSuffix = sop?.sopId ? sop.sopId.toString().replace(/[^a-z0-9]/gi, "_") : "default";
     const fileName = `${idSuffix}_extraction.json`;
-  
-    // 4. Trigger the download
+
+    downloadAnchorNode.setAttribute("href", dataStr);
     downloadAnchorNode.setAttribute("download", fileName);
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
-    
-    // 5. Clean up
     downloadAnchorNode.remove();
   };
 
@@ -941,25 +898,14 @@ export default function DataExtractor({ sop, onClose }) {
             {isPdfLoading ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                <span className="text-sm text-gray-500 font-medium">
-                  Processing large document...
-                </span>
+                <span className="text-sm text-gray-500 font-medium">Fetching Document PDF...</span>
               </div>
             ) : (
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={handlePdfUpload}
-                className="p-2 cursor-pointer text-sm"
-              />
+              <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="p-2 cursor-pointer text-sm" />
             )}
           </div>
         ) : (
-          <iframe
-            src={pdfFile}
-            className="w-full h-full rounded border border-gray-300 bg-white shadow-sm"
-            title="PDF Viewer"
-          />
+          <iframe src={pdfFile} className="w-full h-full rounded border border-gray-300 bg-white shadow-sm" title="PDF Viewer" />
         )}
       </div>
 
@@ -977,18 +923,8 @@ export default function DataExtractor({ sop, onClose }) {
 
             {saveStatus === "error" && (
               <span className="text-[10px] text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-red-300 mr-1">
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  ></path>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Save Failed!
               </span>
@@ -997,32 +933,20 @@ export default function DataExtractor({ sop, onClose }) {
             {saveStatus === "saved" && lastSaved && (
               <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded mr-1">
                 Saved{" "}
-                {lastSaved.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
+                {lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
             )}
 
             <button
               onClick={() => setShowJson(!showJson)}
               className={`px-2 py-1 text-xs rounded transition-colors shadow-sm font-semibold flex items-center justify-center min-w-[80px] ${
-                showJson
-                  ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                showJson ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
               {showJson ? "View Form" : "View JSON"}
             </button>
 
-            <input
-              type="file"
-              accept=".json"
-              style={{ display: "none" }}
-              ref={fileInputRef}
-              onChange={handleImportJson}
-            />
+            <input type="file" accept=".json" style={{ display: "none" }} ref={fileInputRef} onChange={handleImportJson} />
             <button
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center bg-purple-600 text-white px-2 py-1 text-xs rounded hover:bg-purple-700 transition-colors shadow-sm font-semibold"
@@ -1055,7 +979,15 @@ export default function DataExtractor({ sop, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto pb-20 relative">
-          {showJson ? (
+          {/* Conditional Rendering: Show loading state, JSON view, or standard Tree view */}
+          {isDataLoading || !documentData ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex flex-col items-center gap-3">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <span className="text-sm text-gray-500 font-medium">Fetching Data Structure...</span>
+              </div>
+            </div>
+          ) : showJson ? (
             <div className="bg-gray-900 text-green-400 p-3 rounded shadow-inner overflow-auto h-full font-mono text-xs whitespace-pre-wrap">
               {JSON.stringify(documentData, null, 2)}
             </div>
@@ -1064,22 +996,14 @@ export default function DataExtractor({ sop, onClose }) {
               {/* Document Root Metadata UI */}
               <div className="bg-white p-2 rounded border border-gray-300 shadow-sm mb-3">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-sm font-bold text-gray-700">
-                    Document Root Metadata
-                  </h3>
-                  <button
-                    onClick={handleAddRootMetadata}
-                    className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors"
-                  >
+                  <h3 className="text-sm font-bold text-gray-700">Document Root Metadata</h3>
+                  <button onClick={handleAddRootMetadata} className="bg-orange-500 text-white px-2 py-1 rounded text-[10px] hover:bg-orange-600 shadow-sm transition-colors">
                     + Add Root Metadata
                   </button>
                 </div>
 
                 {documentData.metadata.length === 0 ? (
-                  <p className="text-[10px] text-gray-400 italic">
-                    No root metadata added (e.g. Doc ID, Author, Effective
-                    Date).
-                  </p>
+                  <p className="text-[10px] text-gray-400 italic">No root metadata added (e.g. Doc ID, Author, Effective Date).</p>
                 ) : (
                   <div className="space-y-1">
                     {documentData.metadata.map((meta, i) => (
@@ -1088,22 +1012,15 @@ export default function DataExtractor({ sop, onClose }) {
                           className="border border-gray-300 p-1 w-1/3 rounded text-xs focus:outline-blue-500"
                           placeholder="Key (e.g., SOP ID)"
                           value={meta.key}
-                          onChange={(e) =>
-                            handleRootMetadataChange(i, "key", e.target.value)
-                          }
+                          onChange={(e) => handleRootMetadataChange(i, "key", e.target.value)}
                         />
                         <input
                           className="border border-gray-300 p-1 flex-1 rounded text-xs focus:outline-blue-500"
                           placeholder="Value"
                           value={meta.value}
-                          onChange={(e) =>
-                            handleRootMetadataChange(i, "value", e.target.value)
-                          }
+                          onChange={(e) => handleRootMetadataChange(i, "value", e.target.value)}
                         />
-                        <button
-                          onClick={() => handleDeleteRootMetadata(i)}
-                          className="text-red-400 hover:text-red-600 p-1 rounded"
-                        >
+                        <button onClick={() => handleDeleteRootMetadata(i)} className="text-red-400 hover:text-red-600 p-1 rounded">
                           <TrashIcon />
                         </button>
                       </div>
@@ -1115,62 +1032,41 @@ export default function DataExtractor({ sop, onClose }) {
               {/* Roles / Filters UI */}
               <div className="bg-white p-2 rounded border border-gray-300 shadow-sm mb-3">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-sm font-bold text-gray-700">
-                    Roles / Flowchart Lenses
-                  </h3>
-                  <button
-                    onClick={handleAddFilter}
-                    className="bg-indigo-500 text-white px-2 py-1 rounded text-[10px] hover:bg-indigo-600 shadow-sm transition-colors"
-                  >
+                  <h3 className="text-sm font-bold text-gray-700">Roles / Flowchart Lenses</h3>
+                  <button onClick={handleAddFilter} className="bg-indigo-500 text-white px-2 py-1 rounded text-[10px] hover:bg-indigo-600 shadow-sm transition-colors">
                     + Add Role/Filter
                   </button>
                 </div>
 
                 {(documentData.filters || []).length === 0 ? (
-                  <p className="text-[10px] text-gray-400 italic">
-                    No lenses defined. (e.g. Technician, Executive, IPQA)
-                  </p>
+                  <p className="text-[10px] text-gray-400 italic">No lenses defined. (e.g. Technician, Executive, IPQA)</p>
                 ) : (
                   <div className="space-y-1.5">
                     {(documentData.filters || []).map((filter, i) => (
-                      <div
-                        key={i}
-                        className="flex gap-1 items-start bg-gray-50 p-1.5 rounded border border-gray-200"
-                      >
+                      <div key={i} className="flex gap-1 items-start bg-gray-50 p-1.5 rounded border border-gray-200">
                         <input
                           className="border border-gray-300 p-1 w-1/4 rounded focus:outline-indigo-500 text-xs"
                           placeholder="Label (e.g., IPQA)"
                           value={filter.label}
-                          onChange={(e) =>
-                            handleFilterChange(i, "label", e.target.value)
-                          }
+                          onChange={(e) => handleFilterChange(i, "label", e.target.value)}
                         />
                         <input
                           className="border border-gray-300 p-1 flex-1 rounded focus:outline-indigo-500 text-xs"
                           placeholder="Keywords (comma separated)"
                           value={filter.keywords.join(", ")}
-                          onChange={(e) =>
-                            handleFilterChange(i, "keywords", e.target.value)
-                          }
+                          onChange={(e) => handleFilterChange(i, "keywords", e.target.value)}
                           title="Keywords that trigger this role in a section"
                         />
                         <select
                           className="border border-gray-300 p-1 rounded focus:outline-indigo-500 text-xs bg-white capitalize"
                           value={filter.color}
-                          onChange={(e) =>
-                            handleFilterChange(i, "color", e.target.value)
-                          }
+                          onChange={(e) => handleFilterChange(i, "color", e.target.value)}
                         >
                           {COLOR_OPTIONS.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
+                            <option key={c} value={c}>{c}</option>
                           ))}
                         </select>
-                        <button
-                          onClick={() => handleDeleteFilter(i)}
-                          className="text-red-400 hover:text-red-600 p-1 rounded mt-0.5"
-                        >
+                        <button onClick={() => handleDeleteFilter(i)} className="text-red-400 hover:text-red-600 p-1 rounded mt-0.5">
                           <TrashIcon />
                         </button>
                       </div>
@@ -1182,13 +1078,8 @@ export default function DataExtractor({ sop, onClose }) {
               {/* Sections Header */}
               <div className="sticky top-0 z-20 mb-3 pt-2 -mt-2 bg-gray-200">
                 <div className="flex justify-between items-center bg-white p-2 border border-gray-300 rounded shadow-sm">
-                  <h3 className="text-sm font-bold text-gray-700">
-                    SOP Sections
-                  </h3>
-                  <button
-                    onClick={addRootSection}
-                    className="bg-gray-800 text-white px-2 py-1 rounded text-[10px] hover:bg-gray-700 transition-colors shadow-sm"
-                  >
+                  <h3 className="text-sm font-bold text-gray-700">SOP Sections</h3>
+                  <button onClick={addRootSection} className="bg-gray-800 text-white px-2 py-1 rounded text-[10px] hover:bg-gray-700 transition-colors shadow-sm">
                     + Add Root Section
                   </button>
                 </div>
@@ -1202,9 +1093,7 @@ export default function DataExtractor({ sop, onClose }) {
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`min-h-[200px] pb-32 transition-colors duration-200 ${
-                        snapshot.isDraggingOver
-                          ? "bg-gray-300/50 rounded p-2"
-                          : ""
+                        snapshot.isDraggingOver ? "bg-gray-300/50 rounded p-2" : ""
                       }`}
                     >
                       {documentData.sections.map((rootNode, index) => (

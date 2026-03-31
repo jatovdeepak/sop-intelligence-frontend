@@ -1,29 +1,25 @@
 import { useState, useEffect, useRef } from "react";
 import { Loader2, CheckCircle2, XCircle, X, WifiOff } from "lucide-react";
 import toast from "react-hot-toast";
-import { useServiceStatus } from "../context/ServiceStatusContext"; // 👈 Added context import
+import { useServiceStatus } from "../context/ServiceStatusContext";
 
-export default function BuildRag({ sop, onClose }) {
+export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false }) {
   const [status, setStatus] = useState("loading"); // 'loading', 'success', 'error', 'offline'
   const [message, setMessage] = useState("");
   
-  // Use a ref to prevent double-firing in React StrictMode
   const hasTriggered = useRef(false);
 
-  // 🔥 RAG SERVICE STATUS
   const { rag } = useServiceStatus();
   const isRagOffline = rag.status !== "online" && rag.status !== "connecting";
 
-  // Point to your Express Backend (Node.js) to update MongoDB
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
+  // Match fallback to the layout component (3000)
+  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   useEffect(() => {
     const triggerEmbedding = async () => {
       try {
-        // Point this to your FastAPI RAG service port
         const RAG_API_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
         
-        // 1. Sanitize the document ID for ChromaDB (replace spaces with underscores, lowercase it)
         const rawId = sop.sopId || sop._id;
         let safeDocumentId = rawId.toString().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
 
@@ -48,8 +44,11 @@ export default function BuildRag({ sop, onClose }) {
         }
 
         // --- STEP 2: Update MongoDB via Node.js Backend ---
+        const token = sessionStorage.getItem("token");
+        const newRagBuildTime = data.lastRagBuildTime || new Date().toISOString();
+        const newEmbeddingStatus = data.embeddingStatus || "completed";
+
         try {
-          const token = sessionStorage.getItem("token");
           const dbUpdateResponse = await fetch(`${API_URL}/api/sops/${sop._id}`, {
             method: "PUT", 
             headers: {
@@ -58,28 +57,39 @@ export default function BuildRag({ sop, onClose }) {
             },
             body: JSON.stringify({
               embeddingId: data.id || safeDocumentId, 
-              embeddingStatus: data.embeddingStatus || "completed", 
-              lastRagBuildTime: data.lastRagBuildTime || new Date().toISOString()
+              embeddingStatus: newEmbeddingStatus, 
+              lastRagBuildTime: newRagBuildTime
             }),
           });
 
           if (!dbUpdateResponse.ok) {
-            console.warn("RAG embedded successfully, but MongoDB update failed.");
-            toast.error("RAG built, but failed to sync status with database.");
+            throw new Error("MongoDB refused the update. Check backend schema/port.");
           }
         } catch (dbError) {
           console.error("Error updating MongoDB:", dbError);
+          setStatus("error");
+          setMessage("RAG embedded successfully, but saving to your database failed. Stopping to prevent loop.");
           toast.error("Database sync failed.");
+          return; // 🛑 CRITICAL: Halts execution to prevent the auto-close infinite loop
         }
 
+        // --- STEP 3: Break the loop by passing optimistic data directly ---
         const successMsg = data.message || `Successfully embedded SOP ${safeDocumentId}`;
         setStatus("success");
         setMessage(successMsg);
         toast.success("RAG database updated successfully!"); 
         
-        // --- Auto-close and open chat after success ---
+        // --- Auto-close and pass data back to parent ---
         setTimeout(() => {
-          onClose();
+          if (onSuccess) {
+            onSuccess({
+              embeddingStatus: newEmbeddingStatus,
+              lastRagBuildTime: newRagBuildTime,
+              embeddingId: data.id || safeDocumentId
+            });
+          } else {
+            onClose();
+          }
         }, 1500);
 
       } catch (err) {
@@ -91,7 +101,6 @@ export default function BuildRag({ sop, onClose }) {
     };
 
     if (sop && !hasTriggered.current) {
-      // 🔥 INTERCEPT IF OFFLINE
       if (isRagOffline) {
         setStatus("offline");
         toast.error("Cannot build: RAG Service is offline.");
@@ -100,24 +109,34 @@ export default function BuildRag({ sop, onClose }) {
 
       hasTriggered.current = true;
 
-      // --- Time Comparison Logic ---
+      // 🔥 LOGIC UPDATE: Check for ANY status that isn't completed
       const extractedTime = new Date(sop.lastExtractedTime || 0).getTime();
       const ragTime = new Date(sop.lastRagBuildTime || 0).getTime();
 
-      // If extraction is newer than the last build (or it's never been built), build it
-      if (extractedTime > ragTime) {
+      if (
+        sop.embeddingStatus === "Pending" || 
+        sop.embeddingStatus === "Not Embedded" || 
+        sop.embeddingStatus === "Failed" || 
+        sop.embeddingStatus !== "completed" || 
+        forceRebuild || 
+        extractedTime > ragTime
+      ) {
         triggerEmbedding();
       } else {
-        // Already up to date! Skip building and just open the chat
         setStatus("success");
         setMessage("RAG memory is already up to date!");
         toast.success("RAG memory is up to date!"); 
         setTimeout(() => {
-          onClose();
+          if (onSuccess) {
+            onSuccess({ embeddingStatus: "completed" });
+          } else {
+            onClose();
+          }
         }, 1000);
       }
     }
-  }, [sop, onClose, isRagOffline]); // Added isRagOffline to dependencies
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sop, onClose, onSuccess, isRagOffline, API_URL, forceRebuild]); 
 
   return (
     <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
@@ -129,7 +148,6 @@ export default function BuildRag({ sop, onClose }) {
       </button>
 
       <div className="flex flex-col items-center justify-center py-6 text-center">
-        
         {/* LOADING STATE */}
         {status === "loading" && (
           <>
@@ -168,7 +186,7 @@ export default function BuildRag({ sop, onClose }) {
           </>
         )}
 
-        {/* 🔥 NEW: OFFLINE STATE */}
+        {/* OFFLINE STATE */}
         {status === "offline" && (
           <>
             <WifiOff className="h-12 w-12 text-slate-400 mb-4" />
@@ -184,7 +202,6 @@ export default function BuildRag({ sop, onClose }) {
             </button>
           </>
         )}
-
       </div>
     </div>
   );

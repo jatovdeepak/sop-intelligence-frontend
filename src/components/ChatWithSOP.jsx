@@ -20,6 +20,8 @@ import {
   Mic,
   Square,
   Activity,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -42,6 +44,9 @@ export default function ChatWithSOP({ sop, onClose }) {
   const [adminComment, setAdminComment] = useState("");
   const [isApproving, setIsApproving] = useState(false);
 
+  // 🔥 TTS Active Tracking State
+  const [activeTTSIndex, setActiveTTSIndex] = useState(null);
+
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -59,7 +64,27 @@ export default function ChatWithSOP({ sop, onClose }) {
     toggleRecording,
     stopRecording,
     resetData: resetVoiceData,
+    playTextToSpeech,
+    stopTTS,
+    isPlayingTTS,
   } = useSarvamService();
+
+  // Reset the UI icon if the audio finishes playing naturally
+  useEffect(() => {
+    if (!isPlayingTTS) setActiveTTSIndex(null);
+  }, [isPlayingTTS]);
+
+  // Strip Markdown syntax before sending to Sarvam so it doesn't read asterisks out loud
+  const handleTTS = (rawText, index) => {
+    if (isPlayingTTS && activeTTSIndex === index) {
+      stopTTS();
+      setActiveTTSIndex(null);
+    } else {
+      const cleanText = rawText.replace(/[#*`_~>]/g, "").trim();
+      setActiveTTSIndex(index);
+      playTextToSpeech(cleanText, "en-IN");
+    }
+  };
 
   // Sync Native Transcript into the Main Question Input
   useEffect(() => {
@@ -469,183 +494,225 @@ export default function ChatWithSOP({ sop, onClose }) {
                     ) : (
                       <div className="w-full">
                         <ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  components={{
-    // --- NEW: Added Headings & Table styling from the main UI ---
-    h1: ({ children }) => <h1 className="text-base font-bold text-slate-800 mt-5 mb-2 border-b border-slate-200 pb-1">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-[15px] font-bold text-slate-800 mt-4 mb-2">{children}</h2>,
-    h3: ({ children }) => <h3 className="text-[13px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded-md mt-4 mb-2 border border-orange-100">{children}</h3>,
-    table: ({ children }) => <div className="overflow-x-auto my-3 rounded-md border border-slate-200"><table className="min-w-full divide-y divide-slate-200 m-0">{children}</table></div>,
-    th: ({ children }) => <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">{children}</th>,
-    td: ({ children }) => <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">{children}</td>,
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({ children }) => (
+                              <h1 className="text-base font-bold text-slate-800 mt-5 mb-2 border-b border-slate-200 pb-1">
+                                {children}
+                              </h1>
+                            ),
+                            h2: ({ children }) => (
+                              <h2 className="text-[15px] font-bold text-slate-800 mt-4 mb-2">
+                                {children}
+                              </h2>
+                            ),
+                            h3: ({ children }) => (
+                              <h3 className="text-[13px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded-md mt-4 mb-2 border border-orange-100">
+                                {children}
+                              </h3>
+                            ),
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto my-3 rounded-md border border-slate-200">
+                                <table className="min-w-full divide-y divide-slate-200 m-0">
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+                            th: ({ children }) => (
+                              <th className="bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                                {children}
+                              </th>
+                            ),
+                            td: ({ children }) => (
+                              <td className="px-3 py-2 text-[13px] text-slate-600 border-t border-slate-200 whitespace-pre-wrap">
+                                {children}
+                              </td>
+                            ),
+                            p: ({ children }) => (
+                              <p className="mb-3 text-[13px] text-slate-700 leading-relaxed">
+                                {children}
+                              </p>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="list-disc pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5 marker:text-orange-500">
+                                {children}
+                              </ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="list-decimal pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5">
+                                {children}
+                              </ol>
+                            ),
+                            li: ({ children }) => (
+                              <li className="pl-1">{children}</li>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-bold text-slate-900">
+                                {children}
+                              </strong>
+                            ),
+                            img: ({ src, alt }) => {
+                              const isVideo =
+                                alt === "VIDEO" ||
+                                src.match(/\.(mp4|webm|ogg)$/i) ||
+                                src.includes(".mp4");
+                              const mediaObj = {
+                                url: src,
+                                caption: alt,
+                                type: isVideo ? "video" : "image",
+                              };
 
-    // --- UPDATED: Standardized paragraphs and lists ---
-    p: ({ children }) => <p className="mb-3 text-[13px] text-slate-700 leading-relaxed">{children}</p>,
-    ul: ({ children }) => <ul className="list-disc pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5 marker:text-orange-500">{children}</ul>,
-    ol: ({ children }) => <ol className="list-decimal pl-5 mb-4 text-[13px] text-slate-700 space-y-1.5">{children}</ol>,
-    li: ({ children }) => <li className="pl-1">{children}</li>,
-    strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
+                              if (isVideo) {
+                                return (
+                                  <div
+                                    className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
+                                    onClick={() => setActiveMedia(mediaObj)}
+                                  >
+                                    <div
+                                      className="absolute inset-0 z-10 bg-transparent"
+                                      title="Click to expand"
+                                    />
+                                    <video
+                                      src={src}
+                                      className="w-full max-h-[200px] object-contain bg-black"
+                                    />
+                                    <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                                      <Maximize2
+                                        size={14}
+                                        className="text-white"
+                                      />
+                                    </div>
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                                      <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                                        <Play
+                                          fill="currentColor"
+                                          size={20}
+                                          className="ml-0.5"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
 
-    // --- KEPT INTACT: Your advanced custom image/video logic ---
-    img: ({ src, alt }) => {
-      const isVideo =
-        alt === "VIDEO" ||
-        src.match(/\.(mp4|webm|ogg)$/i) ||
-        src.includes(".mp4");
-      const mediaObj = {
-        url: src,
-        caption: alt,
-        type: isVideo ? "video" : "image",
-      };
-
-      if (isVideo) {
-        return (
-          <div
-            className="my-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-w-sm shadow-sm relative group cursor-pointer"
-            onClick={() => setActiveMedia(mediaObj)}
-          >
-            <div
-              className="absolute inset-0 z-10 bg-transparent"
-              title="Click to expand"
-            />
-            <video
-              src={src}
-              className="w-full max-h-[200px] object-contain bg-black"
-            />
-            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-              <Maximize2
-                size={14}
-                className="text-white"
-              />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                <Play
-                  fill="currentColor"
-                  size={20}
-                  className="ml-0.5"
-                />
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div
-          className="my-4 max-w-sm relative group cursor-pointer"
-          onClick={() => setActiveMedia(mediaObj)}
-        >
-          <img
-            src={src}
-            alt={alt}
-            className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
-          />
-          <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
-            <Maximize2
-              size={14}
-              className="text-white"
-            />
-          </div>
-          {alt &&
-            alt !== "image" &&
-            alt !== "Image" &&
-            alt !== "None" && (
-              <div className="mt-1.5 text-xs text-slate-500 text-center italic">
-                {alt}
-              </div>
-            )}
-        </div>
-      );
-    },
-  }}
->
-  {msg.content}
-</ReactMarkdown>
+                              return (
+                                <div
+                                  className="my-4 max-w-sm relative group cursor-pointer"
+                                  onClick={() => setActiveMedia(mediaObj)}
+                                >
+                                  <img
+                                    src={src}
+                                    alt={alt}
+                                    className="rounded-xl shadow-sm border border-slate-200 w-full object-cover max-h-[240px]"
+                                  />
+                                  <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                    <Maximize2
+                                      size={14}
+                                      className="text-white"
+                                    />
+                                  </div>
+                                  {alt &&
+                                    alt !== "image" &&
+                                    alt !== "Image" &&
+                                    alt !== "None" && (
+                                      <div className="mt-1.5 text-xs text-slate-500 text-center italic">
+                                        {alt}
+                                      </div>
+                                    )}
+                                </div>
+                              );
+                            },
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
 
                         {/* Fallback Media Gallery */}
                         {msg.media &&
-                            (() => {
-                              const unusedMedia = msg.media.filter(
-                                (m) => !msg.content.includes(m.url)
-                              );
-                              if (unusedMedia.length === 0) return null;
+                          (() => {
+                            const unusedMedia = msg.media.filter(
+                              (m) => !msg.content.includes(m.url)
+                            );
+                            if (unusedMedia.length === 0) return null;
 
-                              return (
-                                <div className="mt-4 border-t border-slate-100 pt-3">
-                                  <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">
-                                    References & Media
-                                  </p>
-                                  
-                                  <div className="flex overflow-x-auto gap-3 pb-2 snap-x scroll-smooth scrollbar-thin scrollbar-thumb-slate-200">
-                                    {unusedMedia.map((m, idx) => {
-                                      const isVideo =
-                                        m.type === "video" ||
-                                        m.url.match(/\.(mp4|webm|ogg)$/i);
+                            return (
+                              <div className="mt-4 border-t border-slate-100 pt-3">
+                                <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                                  References & Media
+                                </p>
 
-                                      return (
-                                        <div
-                                          key={idx}
-                                          className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col shrink-0 w-[100px] snap-start"
-                                        >
-                                          {isVideo ? (
-                                            <div
-                                              className="relative pt-[56.25%] bg-black group cursor-pointer"
-                                              onClick={() => setActiveMedia(m)}
-                                            >
-                                              <div className="absolute inset-0 bg-transparent z-10" />
-                                              <video
-                                                src={m.url}
-                                                className="absolute inset-0 w-full h-full object-cover opacity-80"
-                                              />
-                                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                                                <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                                                  <Play
-                                                    fill="currentColor"
-                                                    size={14}
-                                                    className="ml-0.5"
-                                                  />
-                                                </div>
-                                              </div>
-                                              <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                                <Maximize2
+                                <div className="flex overflow-x-auto gap-3 pb-2 snap-x scroll-smooth scrollbar-thin scrollbar-thumb-slate-200">
+                                  {unusedMedia.map((m, idx) => {
+                                    const isVideo =
+                                      m.type === "video" ||
+                                      m.url.match(/\.(mp4|webm|ogg)$/i);
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col shrink-0 w-[100px] snap-start"
+                                      >
+                                        {isVideo ? (
+                                          <div
+                                            className="relative pt-[56.25%] bg-black group cursor-pointer"
+                                            onClick={() => setActiveMedia(m)}
+                                          >
+                                            <div className="absolute inset-0 bg-transparent z-10" />
+                                            <video
+                                              src={m.url}
+                                              className="absolute inset-0 w-full h-full object-cover opacity-80"
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                                              <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                                                <Play
+                                                  fill="currentColor"
                                                   size={14}
-                                                  className="text-white"
+                                                  className="ml-0.5"
                                                 />
                                               </div>
                                             </div>
-                                          ) : (
-                                            <div
-                                              className="relative group cursor-pointer flex-1"
-                                              onClick={() => setActiveMedia(m)}
-                                            >
-                                              <img
-                                                src={m.url}
-                                                alt={m.caption || "Reference"}
-                                                className="w-full h-18 object-cover group-hover:opacity-90 transition-opacity"
+                                            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                                              <Maximize2
+                                                size={14}
+                                                className="text-white"
                                               />
-                                              <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                                <Maximize2
-                                                  size={14}
-                                                  className="text-white"
-                                                />
-                                              </div>
                                             </div>
-                                          )}
-                                          {m.caption && m.caption !== "None" && (
-                                            <div className="p-2 text-[10px] text-slate-600 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-                                              <span className="truncate mr-2" title={m.caption}>
-                                                {m.caption}
-                                              </span>
+                                          </div>
+                                        ) : (
+                                          <div
+                                            className="relative group cursor-pointer flex-1"
+                                            onClick={() => setActiveMedia(m)}
+                                          >
+                                            <img
+                                              src={m.url}
+                                              alt={m.caption || "Reference"}
+                                              className="w-full h-18 object-cover group-hover:opacity-90 transition-opacity"
+                                            />
+                                            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                                              <Maximize2
+                                                size={14}
+                                                className="text-white"
+                                              />
                                             </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
+                                          </div>
+                                        )}
+                                        {m.caption && m.caption !== "None" && (
+                                          <div className="p-2 text-[10px] text-slate-600 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                                            <span
+                                              className="truncate mr-2"
+                                              title={m.caption}
+                                            >
+                                              {m.caption}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              );
-                            })()}
+                              </div>
+                            );
+                          })()}
 
                         {msg.isApproved && (
                           <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-800 flex flex-col gap-1.5">
@@ -722,6 +789,30 @@ export default function ChatWithSOP({ sop, onClose }) {
                                   </span>
                                 </button>
                               )}
+
+                            <button
+                              onClick={() => handleTTS(msg.content, i)}
+                              disabled={isPlayingTTS && activeTTSIndex !== i}
+                              className={`p-1.5 rounded transition-colors flex items-center gap-1 ${
+                                activeTTSIndex === i
+                                  ? "text-orange-500 bg-orange-50"
+                                  : "text-slate-400 hover:text-orange-500 hover:bg-orange-50 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                              }`}
+                              title={
+                                activeTTSIndex === i
+                                  ? "Stop speaking"
+                                  : "Listen to answer"
+                              }
+                            >
+                              {activeTTSIndex === i ? (
+                                <VolumeX className="w-3.5 h-3.5" />
+                              ) : (
+                                <Volume2 className="w-3.5 h-3.5" />
+                              )}
+                              <span className="text-[10px] font-medium">
+                                {activeTTSIndex === i ? "Stop" : "Listen"}
+                              </span>
+                            </button>
 
                             <button
                               onClick={() => handleCopy(msg.content, i)}

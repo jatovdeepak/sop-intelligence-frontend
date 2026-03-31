@@ -135,11 +135,27 @@ export default function ChatWithSOP({ sop, onClose }) {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
     if (
       window.confirm("Are you sure you want to clear the current chat view?")
     ) {
+      // 1. Clear the UI immediately for a snappy user experience
       setMessages([]);
+
+      // 2. Tell the backend to permanently delete it
+      try {
+        const res = await fetch(`${API_URL}/user/clear-history/${userId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+
+        if (!res.ok) {
+          console.error("Failed to clear chat history on the server.");
+          // Optional: You could fetch the history back here if the deletion failed
+        }
+      } catch (err) {
+        console.error("Error clearing chat history:", err);
+      }
     }
   };
 

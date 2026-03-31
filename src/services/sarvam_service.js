@@ -9,6 +9,9 @@ export function useSarvamService() {
   const [transcript, setTranscript] = useState("");
   const [translation, setTranslation] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  
+  // --- NEW: TTS States ---
+  const [isPlayingTTS, setIsPlayingTTS] = useState(false);
 
   // Use refs to securely hold completed sentences vs the current live sentence
   const finalTextRef = useRef("");
@@ -16,9 +19,14 @@ export function useSarvamService() {
   const finalTranslationRef = useRef("");
   const interimTranslationRef = useRef("");
 
+  // Refs for recording
   const audioContextRef = useRef(null);
   const processorRef = useRef(null);
   const mediaStreamRef = useRef(null);
+
+  // --- NEW: Refs for TTS streaming ---
+  const audioChunksRef = useRef([]);
+  const currentAudioRef = useRef(null);
 
   useEffect(() => {
     // ---- Voice Handlers ----
@@ -48,17 +56,53 @@ export function useSarvamService() {
       }
     };
 
+    // --- NEW: TTS Handlers ---
+    const handleTTSChunk = (data) => {
+      // Decode base64 to binary array
+      const byteCharacters = atob(data.chunk);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      audioChunksRef.current.push(new Uint8Array(byteNumbers));
+    };
+
+    const handleTTSDone = () => {
+      // Combine all chunks into an MP3 blob
+      const blob = new Blob(audioChunksRef.current, { type: "audio/mp3" });
+      const url = URL.createObjectURL(blob);
+      
+      const audio = new Audio(url);
+      currentAudioRef.current = audio;
+      
+      audio.onended = () => {
+        setIsPlayingTTS(false);
+        URL.revokeObjectURL(url); // Clean up memory
+      };
+      
+      audio.play().catch(e => {
+        console.error("Audio playback failed", e);
+        setIsPlayingTTS(false);
+      });
+      
+      audioChunksRef.current = []; // Reset for next time
+    };
+
     // Attach listeners
     socket.on("transcript", handleTranscript);
     socket.on("transcript_final", handleTranscriptFinal);
     socket.on("translation", handleTranslation);
     socket.on("translation_final", handleTranslationFinal);
+    socket.on("tts_audio_chunk", handleTTSChunk);
+    socket.on("tts_audio_done", handleTTSDone);
 
     return () => {
       socket.off("transcript", handleTranscript);
       socket.off("transcript_final", handleTranscriptFinal);
       socket.off("translation", handleTranslation);
       socket.off("translation_final", handleTranslationFinal);
+      socket.off("tts_audio_chunk", handleTTSChunk);
+      socket.off("tts_audio_done", handleTTSDone);
     };
   }, []);
 
@@ -156,6 +200,29 @@ export function useSarvamService() {
     }
   };
 
+  // --- NEW: TTS Functions ---
+  const playTextToSpeech = useCallback((text, languageCode = "en-IN") => {
+    // If already playing, stop it
+    if (isPlayingTTS && currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+      setIsPlayingTTS(false);
+      return; 
+    }
+
+    setIsPlayingTTS(true);
+    audioChunksRef.current = []; 
+    socket.emit("speak_text", { text, language: languageCode });
+  }, [isPlayingTTS]);
+
+  const stopTTS = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    setIsPlayingTTS(false);
+  }, []);
+
   return {
     isRecording,
     transcript,
@@ -163,5 +230,9 @@ export function useSarvamService() {
     toggleRecording,
     stopRecording,
     resetData,
+    // Export new TTS functions
+    playTextToSpeech,
+    stopTTS,
+    isPlayingTTS
   };
 }

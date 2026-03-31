@@ -478,6 +478,9 @@ export default function DataExtractor({ sop, onClose }) {
   const [saveStatus, setSaveStatus] = useState("idle");
   const fileInputRef = useRef(null);
 
+  // 🔥 FLAG to ignore the initial state hydration
+  const initialLoadRef = useRef(true);
+
   // --- Utility: Check if data is empty ---
   const checkIsDataEmpty = useCallback((dataToCheck) => {
     if (!dataToCheck) return true;
@@ -623,43 +626,49 @@ export default function DataExtractor({ sop, onClose }) {
   }, [sop, API_URL]);
 
 
-// --- EFFECT: Auto-Save ---
-useEffect(() => {
-  // Prevent saving if data is still loading or documentData isn't hydrated yet
-  if (isDataLoading || !documentData || !sop?._id) return;
+  // --- EFFECT: Auto-Save ---
+  useEffect(() => {
+    // Prevent saving if data is still loading or documentData isn't hydrated yet
+    if (isDataLoading || !documentData || !sop?._id) return;
 
-  const timer = setTimeout(async () => {
-    setSaveStatus("saving");
+    // 🔥 PREVENT INITIAL SAVE: Skip saving when data is first loaded/hydrated
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      return; 
+    }
 
-    try {
-      const token = sessionStorage.getItem("token");
-      const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          data: documentData,
-          lastExtractedTime: new Date().toISOString(),
-          embeddingStatus: "Pending" // 🔥 FLAG IT AS PENDING HERE!
-        }),
-      });
+    const timer = setTimeout(async () => {
+      setSaveStatus("saving");
 
-      if (response.ok) {
-        setLastSaved(new Date());
-        setSaveStatus("saved");
-      } else {
+      try {
+        const token = sessionStorage.getItem("token");
+        const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            data: documentData,
+            lastExtractedTime: new Date().toISOString(),
+            embeddingStatus: "Pending" // Flag for RAG rebuild
+          }),
+        });
+
+        if (response.ok) {
+          setLastSaved(new Date());
+          setSaveStatus("saved");
+        } else {
+          setSaveStatus("error");
+        }
+      } catch (err) {
+        console.error("Auto-save failed:", err);
         setSaveStatus("error");
       }
-    } catch (err) {
-      console.error("Auto-save failed:", err);
-      setSaveStatus("error");
-    }
-  }, 1500);
+    }, 1500);
 
-  return () => clearTimeout(timer);
-}, [documentData, isDataLoading, sop, API_URL]);
+    return () => clearTimeout(timer);
+  }, [documentData, isDataLoading, sop, API_URL]);
 
   const handlePdfUpload = (e) => {
     const file = e.target.files?.[0];

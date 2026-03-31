@@ -565,86 +565,87 @@ export default function ChatWithSOP({ sop, onClose }) {
 
                         {/* Fallback Media Gallery */}
                         {msg.media &&
-                          (() => {
-                            const unusedMedia = msg.media.filter(
-                              (m) => !msg.content.includes(m.url)
-                            );
-                            if (unusedMedia.length === 0) return null;
+                            (() => {
+                              const unusedMedia = msg.media.filter(
+                                (m) => !msg.content.includes(m.url)
+                              );
+                              if (unusedMedia.length === 0) return null;
 
-                            return (
-                              <div className="mt-4 border-t border-slate-200 pt-3">
-                                <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">
-                                  Additional Resources
-                                </p>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                  {unusedMedia.map((m, idx) => {
-                                    const isVideo =
-                                      m.type === "video" ||
-                                      m.url.match(/\.(mp4|webm|ogg)$/i);
+                              return (
+                                <div className="mt-4 border-t border-slate-100 pt-3">
+                                  <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                                    References & Media
+                                  </p>
+                                  
+                                  <div className="flex overflow-x-auto gap-3 pb-2 snap-x scroll-smooth scrollbar-thin scrollbar-thumb-slate-200">
+                                    {unusedMedia.map((m, idx) => {
+                                      const isVideo =
+                                        m.type === "video" ||
+                                        m.url.match(/\.(mp4|webm|ogg)$/i);
 
-                                    return (
-                                      <div
-                                        key={idx}
-                                        className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col"
-                                      >
-                                        {isVideo ? (
-                                          <div
-                                            className="relative pt-[56.25%] bg-black group cursor-pointer"
-                                            onClick={() => setActiveMedia(m)}
-                                          >
-                                            <div className="absolute inset-0 bg-transparent z-10" />
-                                            <video
-                                              src={m.url}
-                                              className="absolute inset-0 w-full h-full object-cover opacity-80"
-                                            />
-                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                                              <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
-                                                <Play
-                                                  fill="currentColor"
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col shrink-0 w-[100px] snap-start"
+                                        >
+                                          {isVideo ? (
+                                            <div
+                                              className="relative pt-[56.25%] bg-black group cursor-pointer"
+                                              onClick={() => setActiveMedia(m)}
+                                            >
+                                              <div className="absolute inset-0 bg-transparent z-10" />
+                                              <video
+                                                src={m.url}
+                                                className="absolute inset-0 w-full h-full object-cover opacity-80"
+                                              />
+                                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                                                <div className="bg-white/20 backdrop-blur-sm text-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform">
+                                                  <Play
+                                                    fill="currentColor"
+                                                    size={14}
+                                                    className="ml-0.5"
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                                                <Maximize2
                                                   size={14}
-                                                  className="ml-0.5"
+                                                  className="text-white"
                                                 />
                                               </div>
                                             </div>
-                                            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                              <Maximize2
-                                                size={14}
-                                                className="text-white"
+                                          ) : (
+                                            <div
+                                              className="relative group cursor-pointer flex-1"
+                                              onClick={() => setActiveMedia(m)}
+                                            >
+                                              <img
+                                                src={m.url}
+                                                alt={m.caption || "Reference"}
+                                                className="w-full h-18 object-cover group-hover:opacity-90 transition-opacity"
                                               />
+                                              <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                                                <Maximize2
+                                                  size={14}
+                                                  className="text-white"
+                                                />
+                                              </div>
                                             </div>
-                                          </div>
-                                        ) : (
-                                          <div
-                                            className="relative group cursor-pointer"
-                                            onClick={() => setActiveMedia(m)}
-                                          >
-                                            <img
-                                              src={m.url}
-                                              alt={m.caption || "SOP Reference"}
-                                              className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
-                                            />
-                                            <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                                              <Maximize2
-                                                size={14}
-                                                className="text-white"
-                                              />
+                                          )}
+                                          {m.caption && m.caption !== "None" && (
+                                            <div className="p-2 text-[10px] text-slate-600 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                                              <span className="truncate mr-2" title={m.caption}>
+                                                {m.caption}
+                                              </span>
                                             </div>
-                                          </div>
-                                        )}
-                                        {m.caption && m.caption !== "None" && (
-                                          <div className="p-2 text-xs text-slate-600 bg-slate-50 flex-1 border-t border-slate-100 flex justify-between items-center">
-                                            <span className="truncate mr-2">
-                                              {m.caption}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })()}
+                              );
+                            })()}
 
                         {msg.isApproved && (
                           <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-800 flex flex-col gap-1.5">

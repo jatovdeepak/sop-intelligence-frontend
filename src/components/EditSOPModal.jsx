@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, ChevronDown, CheckCircle2, AlertCircle } from "lucide-react";
+import { SOP_API } from "../services/api-service"; // <-- NEW IMPORT
 
 export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
   const [loading, setLoading] = useState(false);
@@ -7,7 +8,6 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
   const [availableSops, setAvailableSops] = useState([]);
 
   // Environment variables
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "";
   const STORAGE_URL = import.meta.env.VITE_API_STORAGE_SERVER || "http://localhost:5001";
   
   // Form state tracking initialized with the existing SOP data
@@ -25,21 +25,17 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
   useEffect(() => {
     const fetchAvailableSOPs = async () => {
       try {
-        const token = sessionStorage.getItem("token");
-        const response = await fetch(`${API_URL}/api/sops`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          // Filter out the current SOP so it can't reference itself
-          setAvailableSops(data.filter(s => s._id !== sop._id));
-        }
+        // Use the optimized metadata endpoint via api-service
+        const response = await SOP_API.getAllMetadata();
+        
+        // Filter out the current SOP so it can't reference itself
+        setAvailableSops(response.data.filter(s => s._id !== sop._id));
       } catch (err) {
         console.error("Failed to fetch SOPs for references:", err);
       }
     };
     fetchAvailableSOPs();
-  }, [API_URL, sop._id]);
+  }, [sop._id]);
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -94,6 +90,7 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
       let pdfbase64 = sop.pdfPathBase64;
 
       // STEP 1: If the user selected a new file, upload it to the Storage Microservice
+      // We keep raw fetch here because it targets a separate STORAGE_URL microservice
       if (pdfFile) {
         const fileUploadData = new FormData();
         fileUploadData.append("file", pdfFile); // "file" must match multer config on storage server
@@ -126,23 +123,9 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
         pdfPathBase64: pdfbase64 
       };
 
-      const token = sessionStorage.getItem("token");
-
-      // STEP 3: Send as application/json to main API
-      const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, 
-        },
-        body: JSON.stringify(sopData),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || result.message || "Failed to update SOP");
-      }
+      // STEP 3: Send as application/json to main API via api-service
+      const response = await SOP_API.updateSOP(sop._id, sopData);
+      const result = response.data;
 
       showToast("success", "SOP updated successfully!");
       if (onSOPEdited) onSOPEdited(result);
@@ -152,7 +135,9 @@ export default function EditSOPModal({ sop, onClose, onSOPEdited }) {
       }, 1500);
 
     } catch (err) {
-      showToast("error", err.message);
+      // Handle Axios error structure
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to update SOP";
+      showToast("error", errorMessage);
     } finally {
       setLoading(false);
     }

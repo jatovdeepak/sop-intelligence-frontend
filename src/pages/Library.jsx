@@ -16,55 +16,43 @@ import AddSOPModal from "../components/AddSOPModal";
 import EditSOPModal from "../components/EditSOPModal";
 import DataExtractor from "../sop-data-extractor/DataExtractor";
 import PDFViewerModal from "../components/PDFViewerModal";
-import BuildRag from "../components/BuildRag"; // <-- NEW IMPORT
+import BuildRag from "../components/BuildRag"; 
 import SOPChatLayout from "../layouts/SOPChatLayout";
 import SOPFlowchartLayout from "../layouts/SOPFlowchartLayout";
 
+// Import your Zustand store (Adjust path if necessary)
+import useStore from "../services/useStore"; 
+
 export default function Library() {
+  // UI State (Modals)
   const [showCompliance, setShowCompliance] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showAddSOP, setShowAddSOP] = useState(false);
   const [showEditSOP, setShowEditSOP] = useState(false);
   const [showFlowchart, setShowFlowchart] = useState(false);
   const [showExtractor, setShowExtractor] = useState(false);
-  const [showBuildRag, setShowBuildRag] = useState(false); // <-- NEW STATE
+  const [showBuildRag, setShowBuildRag] = useState(false); 
   const [selectedSop, setSelectedSop] = useState(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+  // =========================
+  // ZUSTAND GLOBAL STATE
+  // =========================
+  // We alias sopMetadata to "sops" to keep your existing render logic unchanged
+  const { 
+    sopMetadata: sops, 
+    isLoading, 
+    error, 
+    fetchSOPMetadata, 
+    deleteSOP 
+  } = useStore();
 
-  const [sops, setSops] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const fetchSOPs = async () => {
-    setLoading(true);
-    try {
-      const token = sessionStorage.getItem("token");
-      const response = await fetch(`${API_URL}/api/sops/metadata`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch SOPs");
-      }
-
-      const data = await response.json();
-      setSops(data);
-    } catch (err) {
-      setError(err.message);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Fetch SOP metadata on mount
   useEffect(() => {
-    fetchSOPs();
-  }, []);
+    fetchSOPMetadata();
+  }, [fetchSOPMetadata]);
 
+  // Handle Delete via Zustand Store
   const handleDeleteSOP = async (id) => {
     if (
       !window.confirm(
@@ -72,23 +60,11 @@ export default function Library() {
       )
     )
       return;
-    try {
-      const token = sessionStorage.getItem("token");
-      const response = await fetch(`${API_URL}/api/sops/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error("Failed to delete SOP");
-      fetchSOPs();
-    } catch (err) {
-      alert("Error deleting SOP: " + err.message);
-    }
+    
+    // The store automatically handles the API call and updates the UI instantly
+    await deleteSOP(id);
   };
 
-  // ADDED onBuildRag prop
   function ActionsMenu({
     onCompliance,
     onChat,
@@ -96,7 +72,7 @@ export default function Library() {
     onEdit,
     onDelete,
     onExtract,
-    onBuildRag, // <-- NEW PROP
+    onBuildRag, 
   }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -138,7 +114,6 @@ export default function Library() {
               }}
             />
 
-            {/* NEW MENU ITEM FOR BUILD RAG */}
             {/* <MenuItem
               icon={Database}
               label="Build RAG Context"
@@ -275,7 +250,7 @@ export default function Library() {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {loading ? (
+            {isLoading ? (
               <tr>
                 <td colSpan="7" className="py-8 text-center text-slate-500">
                   Loading SOPs...
@@ -342,7 +317,6 @@ export default function Library() {
                           setShowExtractor(true);
                         }}
                         onBuildRag={() => {
-                          // <-- TRIGGER NEW MODAL HERE
                           setSelectedSop(row);
                           setShowBuildRag(true);
                         }}
@@ -390,8 +364,6 @@ export default function Library() {
       </div>
 
       {/* Modals */}
-
-      {/* NEW: Build RAG Modal */}
       {showBuildRag && selectedSop && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <BuildRag
@@ -408,7 +380,7 @@ export default function Library() {
               sop={selectedSop}
               onClose={() => {
                 setShowExtractor(false);
-                fetchSOPs();
+                fetchSOPMetadata(); // Refresh global state after extraction
               }}
             />
           </div>
@@ -426,42 +398,26 @@ export default function Library() {
         </div>
       )}
 
-      {/* {showChat && selectedSop && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <ChatWithSOP sop={selectedSop} onClose={() => setShowChat(false)} />
-        </div>
-      )} */}
-
-{showChat && selectedSop && (
+      {showChat && selectedSop && (
         <SOPChatLayout 
           sop={selectedSop} 
           onClose={() => setShowChat(false)}
-          onRefresh={fetchSOPs} // Pass fetchSOPs so the orchestrator can update the data
+          onRefresh={fetchSOPMetadata} // Pass Zustand fetch directly
         />
       )}
 
-      {/* {showFlowchart && selectedSop && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <SOPFlowchart
-            sop={selectedSop}
-            onClose={() => setShowFlowchart(false)}
-          />
-        </div>
-      )} */}
-
-      {/* Replace your old showFlowchart block with this: */}
       {showFlowchart && selectedSop && (
         <SOPFlowchartLayout
           sop={selectedSop}
           onClose={() => setShowFlowchart(false)}
-          onRefresh={fetchSOPs} // Allows the orchestrator to pull fresh data after extraction
+          onRefresh={fetchSOPMetadata} // Pass Zustand fetch directly
         />
       )}
 
       {showAddSOP && (
         <AddSOPModal
           onClose={() => setShowAddSOP(false)}
-          onSOPAdded={fetchSOPs}
+          onSOPAdded={fetchSOPMetadata} // Triggers Zustand to pull fresh list
         />
       )}
 
@@ -469,7 +425,7 @@ export default function Library() {
         <EditSOPModal
           sop={selectedSop}
           onClose={() => setShowEditSOP(false)}
-          onSOPEdited={fetchSOPs}
+          onSOPEdited={fetchSOPMetadata} // Triggers Zustand to pull fresh list
         />
       )}
 

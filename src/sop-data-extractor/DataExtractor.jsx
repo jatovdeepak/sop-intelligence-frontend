@@ -3,6 +3,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TableEditor from "./TableEditor";
 import FlowchartEditor from "./FlowchartEditor";
 import MediaEditor from "./MediaEditor";
+import { SOP_API } from "../services/api-service"; // <-- NEW IMPORT
 
 // --- Icons ---
 const TrashIcon = () => (
@@ -464,8 +465,6 @@ const RecursiveNode = ({ node, index, onUpdate, onDelete, onAddSibling }) => {
 
 // --- Main Layout Component (Exported) ---
 export default function DataExtractor({ sop, onClose }) {
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-
   // States
   const [pdfFile, setPdfFile] = useState(null);
   const [documentData, setDocumentData] = useState(null);
@@ -508,20 +507,11 @@ export default function DataExtractor({ sop, onClose }) {
         let activeData = sop?.data;
         const targetId = sop?._id || sop?.sopId;
 
-        // If data is empty and we have an ID, fetch from backend
+        // If data is empty and we have an ID, fetch from backend via api-service
         if (checkIsDataEmpty(activeData) && targetId) {
-          const token = sessionStorage.getItem("token");
-          const response = await fetch(`${API_URL}/api/sops/${targetId}/data`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          if (response.ok) {
-            const result = await response.json();
-            // Assign from common JSON response structures
-            activeData = result.data || result;
-          } else {
-            console.error("Failed to fetch fresh SOP data structure.");
-          }
+          const response = await SOP_API.getDataById(targetId);
+          // Axios puts the response body in `data`
+          activeData = response.data?.data || response.data;
         }
 
         if (isMounted) {
@@ -566,7 +556,7 @@ export default function DataExtractor({ sop, onClose }) {
     return () => {
       isMounted = false;
     };
-  }, [sop, API_URL, checkIsDataEmpty]);
+  }, [sop, checkIsDataEmpty]);
 
   // --- EFFECT: Fetch/Load PDF Base64 ---
   useEffect(() => {
@@ -579,17 +569,10 @@ export default function DataExtractor({ sop, onClose }) {
         let base64String = sop?.pdfPathBase64;
         const targetId = sop?._id || sop?.sopId;
 
-        // Fetch PDF base64 if it's missing from the initial SOP object
+        // Fetch PDF base64 if it's missing via api-service
         if (!base64String && targetId) {
-          const token = sessionStorage.getItem("token");
-          const response = await fetch(`${API_URL}/api/sops/${targetId}/pdf-base64`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          if (response.ok) {
-            const result = await response.json();
-            base64String = result.pdfPathBase64 || result.data || result.pdfBase64;
-          }
+          const response = await SOP_API.getPdfBase64ById(targetId);
+          base64String = response.data?.pdfPathBase64 || response.data?.data || response.data?.pdfBase64;
         }
 
         if (base64String && isMounted) {
@@ -623,7 +606,7 @@ export default function DataExtractor({ sop, onClose }) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [sop, API_URL]);
+  }, [sop]);
 
 
   // --- EFFECT: Auto-Save ---
@@ -641,26 +624,15 @@ export default function DataExtractor({ sop, onClose }) {
       setSaveStatus("saving");
 
       try {
-        const token = sessionStorage.getItem("token");
-        const response = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            data: documentData,
-            lastExtractedTime: new Date().toISOString(),
-            embeddingStatus: "Pending" // Flag for RAG rebuild
-          }),
+        // Use api-service to push changes
+        await SOP_API.updateSOP(sop._id, {
+          data: documentData,
+          lastExtractedTime: new Date().toISOString(),
+          embeddingStatus: "Pending" // Flag for RAG rebuild
         });
-
-        if (response.ok) {
-          setLastSaved(new Date());
-          setSaveStatus("saved");
-        } else {
-          setSaveStatus("error");
-        }
+        
+        setLastSaved(new Date());
+        setSaveStatus("saved");
       } catch (err) {
         console.error("Auto-save failed:", err);
         setSaveStatus("error");
@@ -668,7 +640,7 @@ export default function DataExtractor({ sop, onClose }) {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [documentData, isDataLoading, sop, API_URL]);
+  }, [documentData, isDataLoading, sop]);
 
   const handlePdfUpload = (e) => {
     const file = e.target.files?.[0];

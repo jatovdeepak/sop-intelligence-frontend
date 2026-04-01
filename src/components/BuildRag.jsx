@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2, CheckCircle2, XCircle, X, WifiOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { useServiceStatus } from "../context/ServiceStatusContext";
+import { SOP_API } from "../services/api-service"; 
+import useStore from "../services/useStore"; 
 
 export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false }) {
   const [status, setStatus] = useState("loading"); // 'loading', 'success', 'error', 'offline'
@@ -12,8 +14,7 @@ export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false
   const { rag } = useServiceStatus();
   const isRagOffline = rag.status !== "online" && rag.status !== "connecting";
 
-  // Match fallback to the layout component (3000)
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+  const fetchSOPMetadata = useStore((state) => state.fetchSOPMetadata);
 
   useEffect(() => {
     const triggerEmbedding = async () => {
@@ -43,50 +44,37 @@ export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false
           throw new Error(data.detail || "Failed to embed SOP data.");
         }
 
-        // --- STEP 2: Update MongoDB via Node.js Backend ---
-        const token = sessionStorage.getItem("token");
+        // --- STEP 2: Update MongoDB ---
         const newRagBuildTime = data.lastRagBuildTime || new Date().toISOString();
         const newEmbeddingStatus = data.embeddingStatus || "completed";
 
         try {
-          const dbUpdateResponse = await fetch(`${API_URL}/api/sops/${sop._id}`, {
-            method: "PUT", 
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              embeddingId: data.id || safeDocumentId, 
-              embeddingStatus: newEmbeddingStatus, 
-              lastRagBuildTime: newRagBuildTime
-            }),
+          await SOP_API.updateSOP(sop._id, {
+            embeddingId: data.id || safeDocumentId, 
+            embeddingStatus: newEmbeddingStatus, 
+            lastRagBuildTime: newRagBuildTime
           });
 
-          if (!dbUpdateResponse.ok) {
-            throw new Error("MongoDB refused the update. Check backend schema/port.");
-          }
+          // --- STEP 2.5: FORCE GLOBAL METADATA REFRESH ---
+          await fetchSOPMetadata();
+
         } catch (dbError) {
           console.error("Error updating MongoDB:", dbError);
           setStatus("error");
           setMessage("RAG embedded successfully, but saving to your database failed. Stopping to prevent loop.");
           toast.error("Database sync failed.");
-          return; // 🛑 CRITICAL: Halts execution to prevent the auto-close infinite loop
+          return; 
         }
 
-        // --- STEP 3: Break the loop by passing optimistic data directly ---
+        // --- STEP 3: Finish and execute plain onSuccess ---
         const successMsg = data.message || `Successfully embedded SOP ${safeDocumentId}`;
         setStatus("success");
         setMessage(successMsg);
         toast.success("RAG database updated successfully!"); 
         
-        // --- Auto-close and pass data back to parent ---
         setTimeout(() => {
           if (onSuccess) {
-            onSuccess({
-              embeddingStatus: newEmbeddingStatus,
-              lastRagBuildTime: newRagBuildTime,
-              embeddingId: data.id || safeDocumentId
-            });
+            onSuccess(); // Clean, payload-free execution 
           } else {
             onClose();
           }
@@ -109,7 +97,6 @@ export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false
 
       hasTriggered.current = true;
 
-      // 🔥 LOGIC UPDATE: Check for ANY status that isn't completed
       const extractedTime = new Date(sop.lastExtractedTime || 0).getTime();
       const ragTime = new Date(sop.lastRagBuildTime || 0).getTime();
 
@@ -128,7 +115,7 @@ export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false
         toast.success("RAG memory is up to date!"); 
         setTimeout(() => {
           if (onSuccess) {
-            onSuccess({ embeddingStatus: "completed" });
+            onSuccess(); 
           } else {
             onClose();
           }
@@ -136,7 +123,7 @@ export default function BuildRag({ sop, onClose, onSuccess, forceRebuild = false
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sop, onClose, onSuccess, isRagOffline, API_URL, forceRebuild]); 
+  }, [sop, onClose, onSuccess, isRagOffline, forceRebuild]); 
 
   return (
     <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">

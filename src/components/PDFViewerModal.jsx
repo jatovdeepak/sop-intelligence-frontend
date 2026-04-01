@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, Loader2, AlertCircle } from 'lucide-react';
+import { SOP_API } from '../services/api-service'; // <-- NEW IMPORT
 
 export default function PDFViewerModal({ sop, onClose }) {
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   const [pdfUrl, setPdfUrl] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -16,24 +16,14 @@ export default function PDFViewerModal({ sop, onClose }) {
       setError(null);
       
       try {
-        const token = sessionStorage.getItem("token");
         const targetId = sop._id || sop.sopId;
 
-        // 1. Fetch only the base64 data from the optimized endpoint
-        const response = await fetch(`${API_URL}/api/sops/${targetId}/pdf-base64`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        // 1. Fetch only the base64 data from the optimized endpoint via api-service
+        const response = await SOP_API.getPdfBase64ById(targetId);
 
-        if (!response.ok) {
-          throw new Error(response.status === 403 
-            ? "Unauthorized: You don't have access to this PDF." 
-            : "Failed to fetch PDF from server.");
-        }
-
-        const result = await response.json();
-        const base64Data = result.pdfPathBase64;
+        // Axios handles throwing errors for non-2xx status codes automatically,
+        // and parses the JSON response into the `.data` property.
+        const base64Data = response.data?.pdfPathBase64 || response.data?.data || response.data?.pdfBase64;
 
         if (!base64Data) {
           throw new Error("No PDF document found for this SOP.");
@@ -55,7 +45,15 @@ export default function PDFViewerModal({ sop, onClose }) {
         }
       } catch (err) {
         console.error("PDF Viewer Error:", err);
-        if (isMounted) setError(err.message);
+        
+        // Handle Axios specific error structures nicely
+        if (isMounted) {
+          if (err.response?.status === 403) {
+            setError("Unauthorized: You don't have access to this PDF.");
+          } else {
+            setError(err.response?.data?.message || err.message || "Failed to fetch PDF from server.");
+          }
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -70,7 +68,7 @@ export default function PDFViewerModal({ sop, onClose }) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [sop, API_URL]);
+  }, [sop]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

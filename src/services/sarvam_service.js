@@ -13,6 +13,10 @@ export function useSarvamService() {
   // --- NEW: TTS States ---
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
 
+  // --- NEW: Microphone Selection States ---
+  const [availableMics, setAvailableMics] = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState("");
+
   // Use refs to securely hold completed sentences vs the current live sentence
   const finalTextRef = useRef("");
   const interimTextRef = useRef("");
@@ -24,9 +28,43 @@ export function useSarvamService() {
   const processorRef = useRef(null);
   const mediaStreamRef = useRef(null);
 
-  // --- NEW: Refs for TTS streaming ---
+  // --- Refs for TTS streaming ---
   const audioChunksRef = useRef([]);
   const currentAudioRef = useRef(null);
+
+  // --- NEW: Fetch available microphones on mount ---
+  useEffect(() => {
+    const fetchMics = async () => {
+      try {
+        // Request temporary audio permission FIRST. 
+        // If we don't do this, the browser hides the real hardware names for privacy.
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tempStream.getTracks().forEach(track => track.stop()); // Stop immediately
+
+        // Now fetch the unmasked list of devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(device => device.kind === "audioinput");
+        
+        setAvailableMics(audioInputs);
+
+        // Auto-select the system default or the first available mic
+        if (audioInputs.length > 0) {
+          const defaultMic = audioInputs.find(mic => mic.deviceId === "default") || audioInputs[0];
+          setSelectedMicId(defaultMic.deviceId);
+        }
+      } catch (err) {
+        console.error("Failed to fetch microphones. Permission denied?", err);
+      }
+    };
+
+    fetchMics();
+
+    // Listen for if the user plugs in/unplugs a USB mic or headphones
+    navigator.mediaDevices.addEventListener("devicechange", fetchMics);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", fetchMics);
+    };
+  }, []);
 
   useEffect(() => {
     // ---- Voice Handlers ----
@@ -56,7 +94,7 @@ export function useSarvamService() {
       }
     };
 
-    // --- NEW: TTS Handlers ---
+    // --- TTS Handlers ---
     const handleTTSChunk = (data) => {
       // Decode base64 to binary array
       const byteCharacters = atob(data.chunk);
@@ -139,7 +177,12 @@ export function useSarvamService() {
     socket.emit("start_stt", {});
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // --- NEW: Apply the selected Mic ID to the audio constraints ---
+      const audioConstraints = selectedMicId 
+        ? { deviceId: { exact: selectedMicId } } 
+        : true;
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       mediaStreamRef.current = stream;
 
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -200,7 +243,7 @@ export function useSarvamService() {
     }
   };
 
-  // --- NEW: TTS Functions ---
+  // --- TTS Functions ---
   const playTextToSpeech = useCallback((text, languageCode = "en-IN") => {
     // If already playing, stop it
     if (isPlayingTTS && currentAudioRef.current) {
@@ -230,9 +273,13 @@ export function useSarvamService() {
     toggleRecording,
     stopRecording,
     resetData,
-    // Export new TTS functions
     playTextToSpeech,
     stopTTS,
-    isPlayingTTS
+    isPlayingTTS,
+    
+    // --- NEW: Export device states so the UI component can use them ---
+    availableMics,
+    selectedMicId,
+    setSelectedMicId
   };
 }

@@ -67,6 +67,10 @@ export default function ChatWithSOP({ sop, onClose }) {
     playTextToSpeech,
     stopTTS,
     isPlayingTTS,
+    // 🔥 NEW: Pulled microphone states from your updated hook
+    availableMics,
+    selectedMicId,
+    setSelectedMicId
   } = useSarvamService();
 
   // Reset the UI icon if the audio finishes playing naturally
@@ -940,24 +944,65 @@ export default function ChatWithSOP({ sop, onClose }) {
                   : "bg-slate-50 border-slate-200 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500"
               }`}
             >
-              {/* Mic/Stop Button */}
-              <button
-                onClick={toggleRecording}
-                disabled={isRagOffline}
-                className={`flex-shrink-0 p-2 mb-0.5 rounded-full transition-colors duration-200 flex items-center justify-center
-                  ${
-                    isRecording
-                      ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse"
-                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                  }`}
-                title={isRecording ? "Stop Recording" : "Start Voice Input"}
-              >
-                {isRecording ? (
-                  <Square size={16} fill="currentColor" />
-                ) : (
-                  <Mic size={16} />
+              
+              {/* 🔥 NEW: Wrap Mic Button and Selector in a Flex Container */}
+              <div className="flex items-center gap-0.5 mb-0.5 shrink-0">
+                {/* Mic/Stop Button */}
+                <button
+                  onClick={toggleRecording}
+                  disabled={isRagOffline}
+                  className={`flex-shrink-0 p-2 rounded-full transition-colors duration-200 flex items-center justify-center
+                    ${
+                      isRecording
+                        ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse"
+                        : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                    }`}
+                  title={isRecording ? "Stop Recording" : "Start Voice Input"}
+                >
+                  {isRecording ? (
+                    <Square size={16} fill="currentColor" />
+                  ) : (
+                    <Mic size={16} />
+                  )}
+                </button>
+
+                {/* 🔥 NEW: Mic Selector Dropdown (Arrow Only) */}
+                {availableMics && availableMics.length > 1 && (
+                  <div className="relative flex items-center justify-center w-6 h-8 rounded hover:bg-slate-100 transition-colors">
+                    
+                    {/* The Visible Arrow (drawn with an SVG so you don't need a new import) */}
+                    <svg 
+                      width="12" 
+                      height="12" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      className="text-slate-400 pointer-events-none"
+                    >
+                      <path d="m6 9 6 6 6-6"/>
+                    </svg>
+
+                    {/* The Invisible Native Select covering the arrow */}
+                    <select
+                      value={selectedMicId}
+                      onChange={(e) => setSelectedMicId(e.target.value)}
+                      disabled={isRecording || isRagOffline}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                      title="Switch Microphone"
+                    >
+                      {availableMics.map((mic, idx) => (
+                        <option key={mic.deviceId} value={mic.deviceId} className="text-black">
+                          {mic.label || `Mic ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+
+                  </div>
                 )}
-              </button>
+              </div>
 
               <textarea
                 ref={textareaRef}

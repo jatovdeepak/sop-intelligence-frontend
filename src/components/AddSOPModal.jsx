@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, ChevronDown, CheckCircle2, AlertCircle } from "lucide-react";
+import { SOP_API } from "../services/api-service"; // <-- NEW IMPORT
 
 export default function AddSOPModal({ onClose, onSOPAdded }) {
   const [loading, setLoading] = useState(false);
@@ -7,7 +8,6 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
   const [availableSops, setAvailableSops] = useState([]);
 
   // Environment variables
-  const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   const STORAGE_URL = import.meta.env.VITE_API_STORAGE_SERVER || "http://localhost:5001";
   
   // Form state tracking
@@ -25,20 +25,15 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
   useEffect(() => {
     const fetchAvailableSOPs = async () => {
       try {
-        const token = sessionStorage.getItem("token");
-        const response = await fetch(`${API_URL}/api/sops`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableSops(data);
-        }
+        // Use the optimized metadata endpoint via api-service
+        const response = await SOP_API.getAllMetadata();
+        setAvailableSops(response.data);
       } catch (err) {
         console.error("Failed to fetch SOPs for references:", err);
       }
     };
     fetchAvailableSOPs();
-  }, [API_URL]);
+  }, []);
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -91,6 +86,7 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
       let pdfbase64 = "";
 
       // STEP 1: Upload the file to the Storage Microservice
+      // We keep raw fetch here because it targets a separate STORAGE_URL microservice
       const fileData = new FormData();
       fileData.append("file", pdfFile); // Note: field name "file" must match your multer config upload.single('file')
 
@@ -116,29 +112,16 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
         type: formData.type,
         version: formData.version,
         description: formData.description,
-        references: formData.references, // JSON stringification is handled natively by body: JSON.stringify()
+        references: formData.references,
         status: "Active",
         requiredRoles: ["Operator"], // Using an array for roles
         pdfPath: fileUrl, // Save the absolute URL directly into the DB
         pdfPathBase64: pdfbase64
       };
 
-      const token = sessionStorage.getItem("token");
-
-      const response = await fetch(`${API_URL}/api/sops`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json", // Switching to JSON since we aren't sending files here anymore
-          Authorization: `Bearer ${token}`, 
-        },
-        body: JSON.stringify(sopData),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || result.message || "Failed to add SOP");
-      }
+      // STEP 3: Send to main API via api-service
+      const response = await SOP_API.createSOP(sopData);
+      const result = response.data;
 
       showToast("success", "SOP added successfully!");
       if (onSOPAdded) onSOPAdded(result);
@@ -148,7 +131,9 @@ export default function AddSOPModal({ onClose, onSOPAdded }) {
       }, 1500);
 
     } catch (err) {
-      showToast("error", err.message);
+      // Handle Axios error structure
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to add SOP";
+      showToast("error", errorMessage);
     } finally {
       setLoading(false);
     }

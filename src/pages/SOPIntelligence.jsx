@@ -24,7 +24,9 @@ import {
   Database,
   ListFilter,
   Code,
-  LayoutList
+  LayoutList,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -56,7 +58,10 @@ export default function SOPIntelligence() {
   const [adminComment, setAdminComment] = useState("");
   const [isApproving, setIsApproving] = useState(false);
 
-  // --- NEW: DEBUG PANEL STATE ---
+  // TTS Active Tracking State
+  const [activeTTSIndex, setActiveTTSIndex] = useState(null);
+
+  // DEBUG PANEL STATE
   const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
   const [activeContextData, setActiveContextData] = useState(null);
 
@@ -81,8 +86,28 @@ export default function SOPIntelligence() {
     resetData: resetVoiceData,
     availableMics,
     selectedMicId,
-    setSelectedMicId
+    setSelectedMicId,
+    playTextToSpeech,
+    stopTTS,
+    isPlayingTTS
   } = useSarvamService();
+
+  // Reset the UI icon if the audio finishes playing naturally
+  useEffect(() => {
+    if (!isPlayingTTS) setActiveTTSIndex(null);
+  }, [isPlayingTTS]);
+
+  // Strip Markdown syntax before sending to Sarvam so it doesn't read asterisks out loud
+  const handleTTS = (rawText, index) => {
+    if (isPlayingTTS && activeTTSIndex === index) {
+      stopTTS();
+      setActiveTTSIndex(null);
+    } else {
+      const cleanText = rawText.replace(/[#*`_~>]/g, "").trim();
+      setActiveTTSIndex(index);
+      playTextToSpeech(cleanText, "en-IN");
+    }
+  };
 
   // Sync Native Transcript into the Main Question Input
   useEffect(() => {
@@ -506,7 +531,7 @@ export default function SOPIntelligence() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 🔥 NEW: DEBUG PANEL TOGGLE */}
+            {/* DEBUG PANEL TOGGLE */}
             <button
               onClick={() => setIsContextPanelOpen(!isContextPanelOpen)}
               className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
@@ -569,7 +594,7 @@ export default function SOPIntelligence() {
           </div>
         )}
 
-        {/* 🔥 NEW FLEX ROW CONTAINER FOR SPLIT SCREEN 🔥 */}
+        {/* FLEX ROW CONTAINER FOR SPLIT SCREEN */}
         <div className="flex-1 flex overflow-hidden relative">
           
           {/* MAIN CHAT LEFT SIDE */}
@@ -735,7 +760,7 @@ export default function SOPIntelligence() {
                                   <div className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
                                     {msg.source?.includes("cache") && <><AlertCircle className="w-3 h-3" /> Fast Cache</>}
                                   </div>
-                                  {/* 🔥 NEW: VIEW CONTEXT BUTTON */}
+                                  {/* VIEW CONTEXT BUTTON */}
                                   {msg.searchContext && (
                                     <button 
                                       onClick={() => {
@@ -755,6 +780,27 @@ export default function SOPIntelligence() {
                                       <ThumbsUp className="w-3 h-3" /><span className="text-[11px] font-medium">Approve</span>
                                     </button>
                                   )}
+                                  
+                                  <button
+                                    onClick={() => handleTTS(msg.content, i)}
+                                    disabled={isPlayingTTS && activeTTSIndex !== i}
+                                    className={`px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                                      activeTTSIndex === i
+                                        ? "text-orange-600 bg-orange-50"
+                                        : "text-slate-500 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                                    }`}
+                                    title={activeTTSIndex === i ? "Stop speaking" : "Listen to answer"}
+                                  >
+                                    {activeTTSIndex === i ? (
+                                      <VolumeX className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Volume2 className="w-3.5 h-3.5" />
+                                    )}
+                                    <span className="text-[11px] font-medium">
+                                      {activeTTSIndex === i ? "Stop" : "Listen"}
+                                    </span>
+                                  </button>
+
                                   <button onClick={() => handleCopy(msg.content, i)} className="px-2 py-1 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors flex items-center gap-1">
                                     {copiedIndex === i ? <><Check className="w-3.5 h-3.5 text-emerald-500" /><span className="text-[11px] text-emerald-500 font-medium">Copied</span></> : <><Copy className="w-3.5 h-3.5" /><span className="text-[11px] font-medium">Copy</span></>}
                                   </button>
@@ -838,7 +884,7 @@ export default function SOPIntelligence() {
             </div>
           </div>
 
-          {/* 🔥 NEW: RIGHT DEBUG PANEL 🔥 */}
+          {/* RIGHT DEBUG PANEL */}
           {isContextPanelOpen && (
             <div className="w-full sm:w-80 md:w-[400px] shrink-0 border-l border-slate-200 bg-slate-50 h-full flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-30 absolute right-0 top-0 sm:relative transition-all duration-300">
               {/* Sidebar Header */}

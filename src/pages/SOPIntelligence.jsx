@@ -317,6 +317,15 @@ export default function SOPIntelligence() {
       englishQuestion = translation;
     }
 
+    // Capture the history *before* we add the current question to the state.
+    // We filter out suggestions so the LLM only sees a clean Q&A flow.
+    const chatHistoryPayload = messages
+      .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.type === 'answer'))
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
     const displayQuestion = skipCache ? `Search anyway: "${rawInput}"` : rawInput;
 
     if (!targetSopOverride) {
@@ -345,6 +354,7 @@ export default function SOPIntelligence() {
             user_id: userId,
             question: englishQuestion,
             available_sops: sopCatalogForLLM,
+            chat_history: chatHistoryPayload // <-- Passed history to global chat
           }),
         });
 
@@ -361,7 +371,6 @@ export default function SOPIntelligence() {
           }
         }
 
-        // Extract the new search context
         const searchCtx = data.search_context || data.debug_info || null;
 
         setMessages((prev) => [
@@ -373,7 +382,7 @@ export default function SOPIntelligence() {
             originalQuestion: englishQuestion,
             media: data.media || [],
             pages: data.page_numbers || [],
-            searchContext: searchCtx // Save debugging info
+            searchContext: searchCtx
           },
         ]);
 
@@ -403,7 +412,12 @@ export default function SOPIntelligence() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId, document_id: currentTarget, history_id: embeddingId, question: englishQuestion, skip_cache: skipCache,
+          user_id: userId, 
+          document_id: currentTarget, 
+          history_id: embeddingId, 
+          question: englishQuestion, 
+          skip_cache: skipCache,
+          chat_history: chatHistoryPayload // <-- Passed history to specific chat
         }),
       });
 

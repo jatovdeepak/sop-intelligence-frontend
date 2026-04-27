@@ -185,15 +185,9 @@ export default function SOPIntelligence() {
         const historyMessages = [];
         data.forEach((item) => {
           historyMessages.push({ role: "user", content: item.question });
-          if (item.suggestions && item.suggestions.length > 0) {
-            historyMessages.push({
-              role: "assistant",
-              type: "suggestions",
-              content: "I found similar questions in my memory. Did you mean one of these?",
-              suggestions: item.suggestions,
-              originalQuestion: item.question,
-            });
-          } else {
+          
+          // Map standard answers and attach suggestions if they exist
+          if (item.answer) {
             historyMessages.push({
               role: "assistant",
               type: "answer",
@@ -204,7 +198,17 @@ export default function SOPIntelligence() {
               media: item.media || [],
               pages: item.page_numbers || [],
               originalQuestion: item.question,
-              searchContext: null // History typically won't have full debug context
+              suggestions: item.suggestions || [], // Map suggestions to standard answer
+              searchContext: null 
+            });
+          } else if (item.suggestions && item.suggestions.length > 0) {
+            // Fallback for purely suggestion-based legacy messages
+            historyMessages.push({
+              role: "assistant",
+              type: "suggestions",
+              content: "I found similar questions in my memory. Did you mean one of these?",
+              suggestions: item.suggestions,
+              originalQuestion: item.question,
             });
           }
         });
@@ -317,8 +321,6 @@ export default function SOPIntelligence() {
       englishQuestion = translation;
     }
 
-    // Capture the history *before* we add the current question to the state.
-    // We filter out suggestions so the LLM only sees a clean Q&A flow.
     const chatHistoryPayload = messages
       .filter(msg => msg.role === 'user' || (msg.role === 'assistant' && msg.type === 'answer'))
       .map(msg => ({
@@ -354,7 +356,7 @@ export default function SOPIntelligence() {
             user_id: userId,
             question: englishQuestion,
             available_sops: sopCatalogForLLM,
-            chat_history: chatHistoryPayload // <-- Passed history to global chat
+            chat_history: chatHistoryPayload 
           }),
         });
 
@@ -382,6 +384,7 @@ export default function SOPIntelligence() {
             originalQuestion: englishQuestion,
             media: data.media || [],
             pages: data.page_numbers || [],
+            suggestions: data.suggestions || [], // Map backend suggestions here
             searchContext: searchCtx
           },
         ]);
@@ -417,7 +420,7 @@ export default function SOPIntelligence() {
           history_id: embeddingId, 
           question: englishQuestion, 
           skip_cache: skipCache,
-          chat_history: chatHistoryPayload // <-- Passed history to specific chat
+          chat_history: chatHistoryPayload 
         }),
       });
 
@@ -441,6 +444,7 @@ export default function SOPIntelligence() {
             role: "assistant", type: "answer", content: finalContent, source: data.source || "rag",
             isApproved: data.is_approved || false, adminComment: data.admin_comment || "",
             media: data.media || [], pages: data.page_numbers || [], originalQuestion: englishQuestion,
+            suggestions: data.suggestions || [], // Map backend suggestions here
             searchContext: searchCtx
           },
         ]);
@@ -733,6 +737,35 @@ export default function SOPIntelligence() {
                               {msg.pages && msg.pages.length > 0 && (
                                 <div className="mt-3 text-xs text-slate-500 border-t border-slate-100 pt-2">
                                   <strong className="text-slate-600">Referenced Documents & Pages:</strong> {msg.pages.join(" | ")}
+                                </div>
+                              )}
+
+                              {/* NEW SUGGESTIONS RENDERER WITHIN STANDARD ANSWER */}
+                              {msg.suggestions && msg.suggestions.length > 0 && (
+                                <div className="mt-4 border-t border-slate-100 pt-3">
+                                  <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Suggested Follow-ups</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {msg.suggestions.map((sug, idx) => {
+                                      const matchedSop = availableSops.find((s) => s.sopId === sug || s.embeddingId === sug || s.title === sug);
+                                      return (
+                                        <button
+                                          key={idx}
+                                          onClick={() => {
+                                            if (matchedSop) {
+                                              setMessages((prev) => [...prev, { role: "assistant", type: "answer", content: `*Searching for "**${msg.originalQuestion}**" in **${matchedSop.sopId}**...*` }]);
+                                              handleAsk(msg.originalQuestion, false, matchedSop.embeddingId);
+                                            } else {
+                                              handleAsk(sug, false);
+                                            }
+                                          }}
+                                          disabled={isRagOffline || isSyncing}
+                                          className="text-left px-3 py-1.5 text-xs border border-orange-200 bg-orange-50 text-orange-700 rounded-full hover:bg-orange-500 hover:text-white transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-1.5"
+                                        >
+                                          {matchedSop ? <><ArrowRight className="w-3 h-3" /> {sug}</> : sug}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               )}
 

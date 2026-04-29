@@ -186,7 +186,6 @@ export default function SOPIntelligence() {
         data.forEach((item) => {
           historyMessages.push({ role: "user", content: item.question });
           
-          // Map standard answers and attach suggestions if they exist
           if (item.answer) {
             historyMessages.push({
               role: "assistant",
@@ -198,11 +197,10 @@ export default function SOPIntelligence() {
               media: item.media || [],
               pages: item.page_numbers || [],
               originalQuestion: item.question,
-              suggestions: item.suggestions || [], // Map suggestions to standard answer
+              suggestions: item.suggestions || [],
               searchContext: null 
             });
           } else if (item.suggestions && item.suggestions.length > 0) {
-            // Fallback for purely suggestion-based legacy messages
             historyMessages.push({
               role: "assistant",
               type: "suggestions",
@@ -293,6 +291,10 @@ export default function SOPIntelligence() {
 
       const resultData = await ragResponse.json();
       setSyncStatus({ type: "success", message: `Success! ${resultData.message}` });
+      
+      // Also optionally trigger a sync of the approved QAs
+      fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" }).catch(e => console.error(e));
+
       setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
     } catch (error) {
       console.error("Sync Error:", error);
@@ -303,7 +305,8 @@ export default function SOPIntelligence() {
     }
   };
 
-  const handleAsk = async (queryOverride = null, skipCache = false, targetSopOverride = null) => {
+  // ADDED approvedQaId SUPPORT TO THE FUNCTION SIGNATURE
+  const handleAsk = async (queryOverride = null, skipCache = false, targetSopOverride = null, approvedQaId = null) => {
     if (isRagOffline || isSyncing) return;
     if (isRecording) stopRecording();
 
@@ -330,7 +333,7 @@ export default function SOPIntelligence() {
 
     const displayQuestion = skipCache ? `Search anyway: "${rawInput}"` : rawInput;
 
-    if (!targetSopOverride) {
+    if (!targetSopOverride && !approvedQaId) {
       setMessages((prev) => [...prev, { role: "user", content: displayQuestion }]);
     }
 
@@ -356,12 +359,14 @@ export default function SOPIntelligence() {
             user_id: userId,
             question: englishQuestion,
             available_sops: sopCatalogForLLM,
-            chat_history: chatHistoryPayload 
+            chat_history: chatHistoryPayload,
+            approved_qa_id: approvedQaId // PASSING THE ID FOR DIRECT ANSWER RETRIEVAL
           }),
         });
 
         const data = await res.json();
 
+        // 1. Handle Auto-Routing (Legacy fallback)
         if (data.intent === "auto_select" && data.auto_select_id) {
           const matchedSop = availableSops.find((s) => s.sopId === data.auto_select_id || s.embeddingId === data.auto_select_id);
           if (matchedSop) {
@@ -373,8 +378,25 @@ export default function SOPIntelligence() {
           }
         }
 
+        // 2. Handle Semantic Expert QA Hits
+        if (data.type === "approved_suggestions") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                type: "approved_suggestions",
+                content: data.data,
+                approvedOptions: data.approved_options,
+                originalQuestion: englishQuestion
+              }
+            ]);
+            setLoading(false);
+            return;
+        }
+
         const searchCtx = data.search_context || data.debug_info || null;
 
+        // 3. Handle Standard Answer Data
         setMessages((prev) => [
           ...prev,
           {
@@ -384,8 +406,9 @@ export default function SOPIntelligence() {
             originalQuestion: englishQuestion,
             media: data.media || [],
             pages: data.page_numbers || [],
-            suggestions: data.suggestions || [], // Map backend suggestions here
-            searchContext: searchCtx
+            suggestions: data.suggestions || [], 
+            searchContext: searchCtx,
+            isApproved: data.source === "Expert Approved Answer" // Visual highlight
           },
         ]);
 
@@ -410,7 +433,7 @@ export default function SOPIntelligence() {
         return;
       }
 
-      // --- SPECIFIC SOP QUERY ---
+      // --- SPECIFIC SOP QUERY (Non-Global) ---
       const res = await fetch(`${API_RAG_URL}/user/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -444,7 +467,7 @@ export default function SOPIntelligence() {
             role: "assistant", type: "answer", content: finalContent, source: data.source || "rag",
             isApproved: data.is_approved || false, adminComment: data.admin_comment || "",
             media: data.media || [], pages: data.page_numbers || [], originalQuestion: englishQuestion,
-            suggestions: data.suggestions || [], // Map backend suggestions here
+            suggestions: data.suggestions || [], 
             searchContext: searchCtx
           },
         ]);
@@ -465,20 +488,37 @@ export default function SOPIntelligence() {
   const submitApproval = async (index, msg) => {
     if (isRagOffline) return;
     setIsApproving(true);
+    
     try {
+      // 1. Send the approval to update the JSON history
       const res = await fetch(`${API_RAG_URL}/admin/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          document_id: embeddingId, question: msg.originalQuestion, answer: msg.content, admin_comment: adminComment,
+          document_id: embeddingId, 
+          question: msg.originalQuestion, 
+          answer: msg.content, 
+          admin_comment: adminComment,
         }),
       });
 
       if (res.ok) {
-        setMessages((prev) => prev.map((m, i) => i === index ? { ...m, isApproved: true, adminComment: adminComment } : m));
+        // Update the UI to show the green verified checkmark
+        setMessages((prev) => prev.map((m, i) => 
+          i === index ? { ...m, isApproved: true, adminComment: adminComment } : m
+        ));
         setApprovingIndex(null);
         setAdminComment("");
-      } else alert("Failed to approve answer.");
+        
+        // 2. AUTO-EMBED: Trigger the sync immediately in the background
+        fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" })
+          .then(syncRes => syncRes.json())
+          .then(data => console.log("✅ Auto-embed successful:", data.message))
+          .catch(e => console.error("❌ Auto-embed failed:", e));
+          
+      } else {
+        alert("Failed to approve answer.");
+      }
     } catch (error) {
       console.error("Approval error:", error);
     } finally {
@@ -549,7 +589,6 @@ export default function SOPIntelligence() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* DEBUG PANEL TOGGLE */}
             <button
               onClick={() => setIsContextPanelOpen(!isContextPanelOpen)}
               className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
@@ -612,10 +651,8 @@ export default function SOPIntelligence() {
           </div>
         )}
 
-        {/* FLEX ROW CONTAINER FOR SPLIT SCREEN */}
         <div className="flex-1 flex overflow-hidden relative">
           
-          {/* MAIN CHAT LEFT SIDE */}
           <div className="flex-1 flex flex-col min-w-0 bg-slate-50 relative z-10 transition-all duration-300">
             <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4 relative scrollbar-thin scrollbar-thumb-slate-200">
               {messages.length === 0 ? (
@@ -644,7 +681,33 @@ export default function SOPIntelligence() {
                         )}
 
                         {msg.role === "assistant" ? (
-                          msg.type === "suggestions" ? (
+                          msg.type === "approved_suggestions" ? (
+                            <div className="flex flex-col space-y-3">
+                              <p className="font-medium flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100">
+                                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" /> {msg.content}
+                              </p>
+                              <div className="flex flex-col gap-2 mt-2">
+                                {msg.approvedOptions?.map((opt, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => handleAsk(opt.question, false, null, opt.id)}
+                                    disabled={isRagOffline}
+                                    className="text-left px-3 py-2.5 text-sm border border-emerald-200 bg-white rounded-lg hover:bg-emerald-50 hover:border-emerald-300 hover:shadow-md transition-all shadow-sm disabled:opacity-50 font-medium flex items-start gap-2 group"
+                                  >
+                                    <Sparkles className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                                    <span className="text-slate-700 group-hover:text-emerald-800">{opt.question}</span>
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => handleAsk(msg.originalQuestion, true)}
+                                  disabled={isRagOffline}
+                                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors mt-2 disabled:opacity-50"
+                                >
+                                  None of these, search anyway <ArrowRight className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : msg.type === "suggestions" ? (
                             <div className="flex flex-col space-y-2">
                               <p className="font-medium flex items-center gap-1.5 text-slate-700">
                                 <HelpCircle className="w-4 h-4 text-orange-500" /> {msg.content}
@@ -740,7 +803,6 @@ export default function SOPIntelligence() {
                                 </div>
                               )}
 
-                              {/* NEW SUGGESTIONS RENDERER WITHIN STANDARD ANSWER */}
                               {msg.suggestions && msg.suggestions.length > 0 && (
                                 <div className="mt-4 border-t border-slate-100 pt-3">
                                   <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Suggested Follow-ups</p>
@@ -807,7 +869,6 @@ export default function SOPIntelligence() {
                                   <div className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
                                     {msg.source?.includes("cache") && <><AlertCircle className="w-3 h-3" /> Fast Cache</>}
                                   </div>
-                                  {/* VIEW CONTEXT BUTTON */}
                                   {msg.searchContext && (
                                     <button 
                                       onClick={() => {

@@ -292,7 +292,6 @@ export default function SOPIntelligence() {
       const resultData = await ragResponse.json();
       setSyncStatus({ type: "success", message: `Success! ${resultData.message}` });
       
-      // Also optionally trigger a sync of the approved QAs
       fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" }).catch(e => console.error(e));
 
       setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
@@ -305,7 +304,6 @@ export default function SOPIntelligence() {
     }
   };
 
-  // ADDED approvedQaId SUPPORT TO THE FUNCTION SIGNATURE
   const handleAsk = async (queryOverride = null, skipCache = false, targetSopOverride = null, approvedQaId = null) => {
     if (isRagOffline || isSyncing) return;
     if (isRecording) stopRecording();
@@ -360,13 +358,12 @@ export default function SOPIntelligence() {
             question: englishQuestion,
             available_sops: sopCatalogForLLM,
             chat_history: chatHistoryPayload,
-            approved_qa_id: approvedQaId // PASSING THE ID FOR DIRECT ANSWER RETRIEVAL
+            approved_qa_id: approvedQaId 
           }),
         });
 
         const data = await res.json();
 
-        // 1. Handle Auto-Routing (Legacy fallback)
         if (data.intent === "auto_select" && data.auto_select_id) {
           const matchedSop = availableSops.find((s) => s.sopId === data.auto_select_id || s.embeddingId === data.auto_select_id);
           if (matchedSop) {
@@ -378,7 +375,6 @@ export default function SOPIntelligence() {
           }
         }
 
-        // 2. Handle Semantic Expert QA Hits
         if (data.type === "approved_suggestions") {
             setMessages((prev) => [
               ...prev,
@@ -396,7 +392,6 @@ export default function SOPIntelligence() {
 
         const searchCtx = data.search_context || data.debug_info || null;
 
-        // 3. Handle Standard Answer Data
         setMessages((prev) => [
           ...prev,
           {
@@ -408,7 +403,7 @@ export default function SOPIntelligence() {
             pages: data.page_numbers || [],
             suggestions: data.suggestions || [], 
             searchContext: searchCtx,
-            isApproved: data.source === "Expert Approved Answer" // Visual highlight
+            isApproved: data.source === "Expert Approved Answer" 
           },
         ]);
 
@@ -490,7 +485,6 @@ export default function SOPIntelligence() {
     setIsApproving(true);
     
     try {
-      // 1. Send the approval to update the JSON history
       const res = await fetch(`${API_RAG_URL}/admin/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -503,14 +497,12 @@ export default function SOPIntelligence() {
       });
 
       if (res.ok) {
-        // Update the UI to show the green verified checkmark
         setMessages((prev) => prev.map((m, i) => 
           i === index ? { ...m, isApproved: true, adminComment: adminComment } : m
         ));
         setApprovingIndex(null);
         setAdminComment("");
         
-        // 2. AUTO-EMBED: Trigger the sync immediately in the background
         fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" })
           .then(syncRes => syncRes.json())
           .then(data => console.log("✅ Auto-embed successful:", data.message))
@@ -994,9 +986,9 @@ export default function SOPIntelligence() {
 
           {/* RIGHT DEBUG PANEL */}
           {isContextPanelOpen && (
-            <div className="w-full sm:w-80 md:w-[400px] shrink-0 border-l border-slate-200 bg-slate-50 h-full flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-30 absolute right-0 top-0 sm:relative transition-all duration-300">
+            <div className="w-full sm:w-80 md:w-[400px] shrink-0 border-l border-white/40 bg-slate-50/90 backdrop-blur-md h-full flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-30 absolute right-0 top-0 sm:relative transition-all duration-300">
               {/* Sidebar Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white shadow-sm shrink-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white/80 shadow-sm shrink-0">
                 <h3 className="text-xs font-bold text-slate-700 flex items-center gap-2 uppercase tracking-wider">
                   <Terminal size={14} className="text-purple-600" /> RAG Debug Data
                 </h3>
@@ -1017,26 +1009,26 @@ export default function SOPIntelligence() {
                   <div className="space-y-3 font-mono">
                     
                     {/* Final LLM Context Section */}
-                    <details className="border border-slate-200 rounded-md bg-white shadow-sm group" open>
-                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <details className="border border-slate-200 rounded-md bg-white/80 shadow-sm group" open>
+                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                         <span className="flex items-center gap-1.5"><Code size={13} className="text-orange-500"/> Final LLM Context</span>
                       </summary>
-                      <div className="p-0 bg-slate-900 overflow-hidden rounded-b-md">
+                      <div className="p-0 bg-slate-900/95 overflow-hidden rounded-b-md">
                         <pre className="text-[10px] text-emerald-400 p-3 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words leading-relaxed scrollbar-thin scrollbar-thumb-slate-700">
                           {activeContextData.final_llm_context || "No context assembled for LLM."}
                         </pre>
                       </div>
                     </details>
 
-                    {/* Reranked Search Section (FlashRank) */}
-                    <details className="border border-slate-200 rounded-md bg-white shadow-sm group">
-                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    {/* Reranked Search Section */}
+                    <details className="border border-slate-200 rounded-md bg-white/80 shadow-sm group">
+                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                         <span className="flex items-center gap-1.5"><ListFilter size={13} className="text-blue-500"/> Reranked Data</span>
                         <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded-full">{activeContextData.reranked_search?.length || 0} chunks</span>
                       </summary>
-                      <div className="p-2 bg-slate-50 max-h-[300px] overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-slate-300">
+                      <div className="p-2 bg-slate-50/50 max-h-[300px] overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-slate-300">
                         {activeContextData.reranked_search?.map((item, idx) => (
-                          <div key={idx} className="border border-slate-200 p-2 rounded bg-white text-[10px]">
+                          <div key={idx} className="border border-slate-200/60 p-2 rounded bg-white text-[10px]">
                             <div className="flex justify-between items-center mb-1.5 pb-1.5 border-b border-slate-100">
                               <span className="font-bold text-slate-600 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">Score: {item.score?.toFixed(5)}</span>
                               <span className="text-slate-400 truncate max-w-[120px]" title={item.id}>{item.id}</span>
@@ -1048,16 +1040,17 @@ export default function SOPIntelligence() {
                     </details>
 
                     {/* Initial Similarity Search (ChromaDB) */}
-                    <details className="border border-slate-200 rounded-md bg-white shadow-sm group">
-                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <details className="border border-slate-200 rounded-md bg-white/80 shadow-sm group">
+                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                         <span className="flex items-center gap-1.5"><Database size={13} className="text-purple-500"/> Initial Vector Search</span>
                         <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded-full">{activeContextData.initial_search?.length || 0} chunks</span>
                       </summary>
-                      <div className="p-2 bg-slate-50 max-h-[300px] overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-slate-300">
+                      <div className="p-2 bg-slate-50/50 max-h-[300px] overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-slate-300">
                         {activeContextData.initial_search?.map((item, idx) => (
-                          <div key={idx} className="border border-slate-200 p-2 rounded bg-white text-[10px]">
-                            <div className="flex justify-end mb-1">
-                              <span className="text-slate-400 truncate max-w-[180px]" title={item.id}>{item.id}</span>
+                          <div key={idx} className="border border-slate-200/60 p-2 rounded bg-white text-[10px]">
+                            <div className="flex justify-between items-center mb-1.5 pb-1.5 border-b border-slate-100">
+                              <span className="font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Dist: {item.distance?.toFixed(3)}</span>
+                              <span className="text-slate-400 truncate max-w-[120px]" title={item.id}>{item.id}</span>
                             </div>
                             <p className="whitespace-pre-wrap text-slate-500 leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">{item.text}</p>
                           </div>
@@ -1066,12 +1059,12 @@ export default function SOPIntelligence() {
                     </details>
 
                     {/* Extracted Parent Data */}
-                    <details className="border border-slate-200 rounded-md bg-white shadow-sm group">
-                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <details className="border border-slate-200 rounded-md bg-white/80 shadow-sm group">
+                      <summary className="p-2.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none group-open:border-b border-slate-100 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                         <span className="flex items-center gap-1.5"><LayoutList size={13} className="text-emerald-500"/> Extracted Parent Nodes</span>
                         <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded-full">{activeContextData.parent_sections?.length || 0} nodes</span>
                       </summary>
-                      <div className="p-0 bg-slate-900 overflow-hidden rounded-b-md">
+                      <div className="p-0 bg-slate-900/95 overflow-hidden rounded-b-md">
                         <pre className="text-[10px] text-sky-400 p-3 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words leading-relaxed scrollbar-thin scrollbar-thumb-slate-700">
                           {JSON.stringify(activeContextData.parent_sections, null, 2)}
                         </pre>

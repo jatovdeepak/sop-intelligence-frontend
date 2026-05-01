@@ -58,6 +58,12 @@ export default function SOPIntelligence() {
   const [adminComment, setAdminComment] = useState("");
   const [isApproving, setIsApproving] = useState(false);
 
+  // Approved Q/A Management State
+  const [approvedQaLoading, setApprovedQaLoading] = useState(false);
+  const [showApprovedModal, setShowApprovedModal] = useState(false);
+  const [approvedQaRows, setApprovedQaRows] = useState([]);
+  const [approvedQaSearch, setApprovedQaSearch] = useState("");
+
   // TTS Active Tracking State
   const [activeTTSIndex, setActiveTTSIndex] = useState(null);
 
@@ -301,6 +307,70 @@ export default function SOPIntelligence() {
       setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const fetchApprovedQAs = async () => {
+    setApprovedQaLoading(true);
+    try {
+      const res = await fetch(`${API_RAG_URL}/api/approved-qas`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed");
+      setApprovedQaRows(data.data || []);
+      setShowApprovedModal(true);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setApprovedQaLoading(false);
+    }
+  };
+
+  const handleDeleteSingleApprovedQA = async (qaId) => {
+    const ok = window.confirm("Delete this approved Q/A?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`${API_RAG_URL}/api/approved-qas/${qaId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Delete failed");
+      setApprovedQaRows((prev) => prev.filter((item) => item.id !== qaId));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteApprovedQAs = async () => {
+    const ok = window.confirm("Delete ALL approved Q/A vectors?\n\nThis cannot be undone.");
+    if (!ok) return;
+    setApprovedQaLoading(true);
+    try {
+      const res = await fetch(`${API_RAG_URL}/api/approved-qas`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Delete failed");
+      setApprovedQaRows([]);
+      setShowApprovedModal(false);
+      setSyncStatus({ type: "success", message: data.message || "Deleted." });
+    } catch (err) {
+      setSyncStatus({ type: "error", message: err.message });
+    } finally {
+      setApprovedQaLoading(false);
+      setTimeout(() => { setSyncStatus({ type: null, message: "" }); }, 5000);
+    }
+  };
+
+  const handleSyncApprovedQAs = async () => {
+    setApprovedQaLoading(true);
+    setSyncStatus({ type: "info", message: "Syncing approved Q/A..." });
+    try {
+      const res = await fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Sync failed");
+      setSyncStatus({ type: "success", message: data.message || "Synced." });
+      await fetchApprovedQAs();
+    } catch (err) {
+      setSyncStatus({ type: "error", message: err.message });
+    } finally {
+      setApprovedQaLoading(false);
+      setTimeout(() => { setSyncStatus({ type: null, message: "" }); }, 5000);
     }
   };
 
@@ -596,24 +666,48 @@ export default function SOPIntelligence() {
               <>
                 <button
                   onClick={handleGlobalSync}
-                  disabled={isSyncing}
-                  className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
-                    isSyncing ? "text-blue-700 bg-blue-100 cursor-not-allowed opacity-80" : "text-blue-600 bg-blue-50 hover:bg-blue-100"
-                  }`}
-                  title="Sync latest SOPs to the Global Database"
+                  disabled={isSyncing || approvedQaLoading}
+                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100"
                 >
                   <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin" : ""}`} />
-                  <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync Database"}</span>
+                  <span className="hidden sm:inline">
+                    {isSyncing ? "Syncing..." : "Sync DB"}
+                  </span>
                 </button>
+
+                <button
+                  onClick={handleSyncApprovedQAs}
+                  disabled={approvedQaLoading}
+                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                >
+                  <CheckCircle className="w-3 h-3" />
+                  <span className="hidden sm:inline">Sync Approved</span>
+                </button>
+
+                <button
+                  onClick={fetchApprovedQAs}
+                  disabled={approvedQaLoading}
+                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-purple-700 bg-purple-50 hover:bg-purple-100"
+                >
+                  <Database className="w-3 h-3" />
+                  <span className="hidden sm:inline">View Approved</span>
+                </button>
+
+                <button
+                  onClick={handleDeleteApprovedQAs}
+                  disabled={approvedQaLoading}
+                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-red-700 bg-red-50 hover:bg-red-100"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span className="hidden sm:inline">Delete Approved</span>
+                </button>
+
                 <button
                   onClick={handleClearCache}
-                  className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
-                    embeddingId === "global" ? "text-amber-700 bg-amber-100 hover:bg-amber-200" : "text-slate-600 bg-slate-100 hover:bg-slate-200"
-                  }`}
-                  title={embeddingId === "global" ? "Clear ALL AI Caches globally" : "Clear AI Cache for this SOP"}
+                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-slate-600 bg-slate-100 hover:bg-slate-200"
                 >
                   <RefreshCw className="w-3 h-3" />
-                  <span className="hidden sm:inline">{embeddingId === "global" ? "Clear All Caches" : "Clear Cache"}</span>
+                  <span className="hidden sm:inline">Clear Cache</span>
                 </button>
               </>
             )}
@@ -1078,6 +1172,92 @@ export default function SOPIntelligence() {
           )}
         </div>
       </div>
+
+      {showApprovedModal && (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden">
+
+            {/* Header */}
+            <div className="px-5 py-4 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800">
+                  Approved Q/A Vector Database
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  {approvedQaRows.length} records
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowApprovedModal(false)}
+                className="p-2 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="p-4 border-b">
+              <input
+                value={approvedQaSearch}
+                onChange={(e) => setApprovedQaSearch(e.target.value)}
+                placeholder="Search question..."
+                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500"
+              />
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3">Question</th>
+                    <th className="text-left px-4 py-3">Answer</th>
+                    <th className="text-left px-4 py-3 w-24">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {approvedQaRows
+                    .filter((row) =>
+                      row.question
+                        ?.toLowerCase()
+                        .includes(approvedQaSearch.toLowerCase())
+                    )
+                    .map((row) => (
+                      <tr
+                        key={row.id}
+                        className="border-b hover:bg-slate-50"
+                      >
+                        <td className="px-4 py-3 align-top text-slate-700 font-medium max-w-xs">
+                          {row.question}
+                        </td>
+
+                        <td className="px-4 py-3 align-top text-slate-600 text-xs">
+                          <div className="line-clamp-4 whitespace-pre-wrap">
+                            {row.answer}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 align-top">
+                          <button
+                            onClick={() =>
+                              handleDeleteSingleApprovedQA(row.id)
+                            }
+                            className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       <MediaModal mediaItem={activeMedia} onClose={() => setActiveMedia(null)} />
     </>

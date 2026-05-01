@@ -302,7 +302,7 @@ export default function SOPIntelligence() {
 
       setSyncStatus({ type: "info", message: `Found ${activeSops.length} active SOPs. Building global vector database...` });
 
-      const ragResponse = await fetch(`${API_RAG_URL}/api/bulk-global-embed`, {
+      const ragResponse = await fetch(`${API_RAG_URL}/global-api/bulk-embed`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(activeSops),
@@ -316,7 +316,7 @@ export default function SOPIntelligence() {
       const resultData = await ragResponse.json();
       setSyncStatus({ type: "success", message: `Success! ${resultData.message}` });
       
-      fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" }).catch(e => console.error(e));
+      fetch(`${API_RAG_URL}/global-api/sync-approved-qas`, { method: "POST" }).catch(e => console.error(e));
 
       setTimeout(() => setSyncStatus({ type: null, message: "" }), 5000);
     } catch (error) {
@@ -331,7 +331,7 @@ export default function SOPIntelligence() {
   const fetchApprovedQAs = async () => {
     setApprovedQaLoading(true);
     try {
-      const res = await fetch(`${API_RAG_URL}/api/approved-qas`);
+      const res = await fetch(`${API_RAG_URL}/global-api/approved-qas`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed");
       setApprovedQaRows(data.data || []);
@@ -347,7 +347,7 @@ export default function SOPIntelligence() {
     const ok = window.confirm("Delete this approved Q/A?");
     if (!ok) return;
     try {
-      const res = await fetch(`${API_RAG_URL}/api/approved-qas/${qaId}`, { method: "DELETE" });
+      const res = await fetch(`${API_RAG_URL}/global-api/approved-qas/${qaId}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Delete failed");
       setApprovedQaRows((prev) => prev.filter((item) => item.id !== qaId));
@@ -361,7 +361,7 @@ export default function SOPIntelligence() {
     if (!ok) return;
     setApprovedQaLoading(true);
     try {
-      const res = await fetch(`${API_RAG_URL}/api/approved-qas`, { method: "DELETE" });
+      const res = await fetch(`${API_RAG_URL}/global-api/approved-qas`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Delete failed");
       setApprovedQaRows([]);
@@ -379,7 +379,7 @@ export default function SOPIntelligence() {
     setApprovedQaLoading(true);
     setSyncStatus({ type: "info", message: "Syncing approved Q/A..." });
     try {
-      const res = await fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" });
+      const res = await fetch(`${API_RAG_URL}/global-api/sync-approved-qas`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Sync failed");
       setSyncStatus({ type: "success", message: data.message || "Synced." });
@@ -438,7 +438,7 @@ export default function SOPIntelligence() {
           id: s.embeddingId, sopId: s.sopId, title: s.title, type: s.type,
         }));
 
-        const res = await fetch(`${API_RAG_URL}/user/global-chat`, {
+        const res = await fetch(`${API_RAG_URL}/global-api/user/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -592,7 +592,7 @@ export default function SOPIntelligence() {
         setApprovingIndex(null);
         setAdminComment("");
         
-        fetch(`${API_RAG_URL}/api/sync-approved-qas`, { method: "POST" })
+        fetch(`${API_RAG_URL}/global-api/sync-approved-qas`, { method: "POST" })
           .then(syncRes => syncRes.json())
           .then(data => console.log("✅ Auto-embed successful:", data.message))
           .catch(e => console.error("❌ Auto-embed failed:", e));

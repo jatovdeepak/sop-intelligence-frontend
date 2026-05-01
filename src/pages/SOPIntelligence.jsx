@@ -201,7 +201,7 @@ export default function SOPIntelligence() {
 
   const fetchHistory = async (uid, embId) => {
     try {
-      const res = await fetch(`${API_RAG_URL}/user/history/${uid}/${embId}`);
+      const res = await fetch(`${API_RAG_URL}/global-user/history/${uid}/${embId}`);
       if (!res.ok) return;
       const data = await res.json();
 
@@ -246,7 +246,7 @@ export default function SOPIntelligence() {
   const handleClearHistory = async () => {
     if (!window.confirm("Are you sure you want to clear your personal chat history for this SOP?")) return;
     try {
-      await fetch(`${API_RAG_URL}/user/clear-history/${userId}`, { method: "POST" });
+      await fetch(`${API_RAG_URL}/global-user/clear-history/${userId}`, { method: "POST" });
       setMessages([]);
       setActiveContextData(null);
     } catch (err) {
@@ -574,34 +574,43 @@ export default function SOPIntelligence() {
     setIsApproving(true);
     
     try {
-      const res = await fetch(`${API_RAG_URL}/admin/approve`, {
+      const res = await fetch(`${API_RAG_URL}/global-api/expert/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          document_id: embeddingId, 
+          document_id: embeddingId || "global", 
           question: msg.originalQuestion, 
           answer: msg.content, 
           admin_comment: adminComment,
+          media: msg.media || [],
+          page_numbers: msg.pages || []
         }),
       });
 
       if (res.ok) {
+        // 1. Update the UI state to show it is approved
         setMessages((prev) => prev.map((m, i) => 
           i === index ? { ...m, isApproved: true, adminComment: adminComment } : m
         ));
+        
+        // 2. Reset approval inputs
         setApprovingIndex(null);
         setAdminComment("");
         
-        fetch(`${API_RAG_URL}/global-api/sync-approved-qas`, { method: "POST" })
-          .then(syncRes => syncRes.json())
-          .then(data => console.log("✅ Auto-embed successful:", data.message))
-          .catch(e => console.error("❌ Auto-embed failed:", e));
-          
+        // 3. Show instant success feedback in the top banner
+        setSyncStatus({ type: "success", message: "Answer approved and instantly cached to the global database." });
+        setTimeout(() => setSyncStatus({ type: null, message: "" }), 4000);
+        
+        // NOTE: We no longer need to call /sync-approved-qas here! 
+        // The backend handles the ChromaDB upsert instantly.
+        
       } else {
-        alert("Failed to approve answer.");
+        const errorData = await res.json();
+        alert(`Failed to approve answer: ${errorData.detail || 'Unknown error'}`);
       }
     } catch (error) {
       console.error("Approval error:", error);
+      alert("Network error while trying to approve the answer.");
     } finally {
       setIsApproving(false);
     }

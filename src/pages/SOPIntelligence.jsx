@@ -419,9 +419,8 @@ export default function SOPIntelligence() {
 
     const displayQuestion = skipCache ? `Search anyway: "${rawInput}"` : rawInput;
 
-    if (!targetSopOverride && !approvedQaId) {
-      setMessages((prev) => [...prev, { role: "user", content: displayQuestion }]);
-    }
+    // ALWAYS show the user message bubble when a search is triggered
+    setMessages((prev) => [...prev, { role: "user", content: displayQuestion }]);
 
     if (!queryOverride) {
       setQuestion("");
@@ -452,17 +451,6 @@ export default function SOPIntelligence() {
         });
 
         const data = await res.json();
-
-        if (data.intent === "auto_select" && data.auto_select_id) {
-          const matchedSop = availableSops.find((s) => s.sopId === data.auto_select_id || s.embeddingId === data.auto_select_id);
-          if (matchedSop) {
-            setMessages((prev) => [
-              ...prev,
-              { role: "assistant", type: "answer", content: `*Detected intent for **${matchedSop.sopId}**. Searching document...*` },
-            ]);
-            return handleAsk(englishQuestion, skipCache, matchedSop.embeddingId);
-          }
-        }
 
         if (data.type === "approved_suggestions") {
             setMessages((prev) => [
@@ -498,65 +486,8 @@ export default function SOPIntelligence() {
 
         if (searchCtx) setActiveContextData(searchCtx);
 
-        if (data.suggested_ids && data.suggested_ids.length > 0) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              type: "suggestions",
-              content: "These SOPs might contain what you need:",
-              suggestions: data.suggested_ids.map((id) => {
-                const match = availableSops.find((s) => s.embeddingId === id || s.sopId === id || s.title === id);
-                return match ? match.sopId : id;
-              }),
-              originalQuestion: englishQuestion,
-            },
-          ]);
-        }
         setLoading(false);
         return;
-      }
-
-      // --- SPECIFIC SOP QUERY (Non-Global) ---
-      const res = await fetch(`${API_RAG_URL}/user/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: userId, 
-          document_id: currentTarget, 
-          history_id: embeddingId, 
-          question: englishQuestion, 
-          skip_cache: skipCache,
-          chat_history: chatHistoryPayload 
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.type === "suggestions") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant", type: "suggestions", content: data.message || "Did you mean one of these?",
-            suggestions: data.data || [], originalQuestion: data.original_question || englishQuestion,
-          },
-        ]);
-      } else {
-        let finalContent = (data.data || data.answer || "").trim() || "⚠️ Sorry, received an empty response.";
-        const searchCtx = data.search_context || data.debug_info || null;
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant", type: "answer", content: finalContent, source: data.source || "rag",
-            isApproved: data.is_approved || false, adminComment: data.admin_comment || "",
-            media: data.media || [], pages: data.page_numbers || [], originalQuestion: englishQuestion,
-            suggestions: data.suggestions || [], 
-            searchContext: searchCtx
-          },
-        ]);
-
-        if (searchCtx) setActiveContextData(searchCtx);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -588,21 +519,15 @@ export default function SOPIntelligence() {
       });
 
       if (res.ok) {
-        // 1. Update the UI state to show it is approved
         setMessages((prev) => prev.map((m, i) => 
           i === index ? { ...m, isApproved: true, adminComment: adminComment } : m
         ));
         
-        // 2. Reset approval inputs
         setApprovingIndex(null);
         setAdminComment("");
         
-        // 3. Show instant success feedback in the top banner
         setSyncStatus({ type: "success", message: "Answer approved and instantly cached to the global database." });
         setTimeout(() => setSyncStatus({ type: null, message: "" }), 4000);
-        
-        // NOTE: We no longer need to call /sync-approved-qas here! 
-        // The backend handles the ChromaDB upsert instantly.
         
       } else {
         const errorData = await res.json();
@@ -819,7 +744,7 @@ export default function SOPIntelligence() {
                               <div className="flex flex-col gap-2 mt-2">
                                 {msg.approvedOptions?.map((opt, idx) => (
                                   <button
-                                    key={idx}
+                                    key={`sug-approved-${idx}`}
                                     onClick={() => handleAsk(opt.question, false, null, opt.id)}
                                     disabled={isRagOffline}
                                     className="text-left px-3 py-2.5 text-sm border border-emerald-200 bg-white rounded-lg hover:bg-emerald-50 hover:border-emerald-300 hover:shadow-md transition-all shadow-sm disabled:opacity-50 font-medium flex items-start gap-2 group"
@@ -847,15 +772,8 @@ export default function SOPIntelligence() {
                                   const matchedSop = availableSops.find((s) => s.sopId === sug || s.embeddingId === sug || s.title === sug);
                                   return (
                                     <button
-                                      key={idx}
-                                      onClick={() => {
-                                        if (matchedSop) {
-                                          setMessages((prev) => [...prev, { role: "assistant", type: "answer", content: `*Searching for "**${msg.originalQuestion}**" in **${matchedSop.sopId}**...*` }]);
-                                          handleAsk(msg.originalQuestion, false, matchedSop.embeddingId);
-                                        } else {
-                                          handleAsk(sug, false);
-                                        }
-                                      }}
+                                      key={`sug-type-${idx}`}
+                                      onClick={() => handleAsk(sug)}
                                       disabled={isRagOffline}
                                       className="text-left px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-2"
                                     >
@@ -941,15 +859,8 @@ export default function SOPIntelligence() {
                                       const matchedSop = availableSops.find((s) => s.sopId === sug || s.embeddingId === sug || s.title === sug);
                                       return (
                                         <button
-                                          key={idx}
-                                          onClick={() => {
-                                            if (matchedSop) {
-                                              setMessages((prev) => [...prev, { role: "assistant", type: "answer", content: `*Searching for "**${msg.originalQuestion}**" in **${matchedSop.sopId}**...*` }]);
-                                              handleAsk(msg.originalQuestion, false, matchedSop.embeddingId);
-                                            } else {
-                                              handleAsk(sug, false);
-                                            }
-                                          }}
+                                          key={`sug-followup-${idx}`}
+                                          onClick={() => handleAsk(sug)}
                                           disabled={isRagOffline || isSyncing}
                                           className="text-left px-3 py-1.5 text-xs border border-orange-200 bg-orange-50 text-orange-700 rounded-full hover:bg-orange-500 hover:text-white transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-1.5"
                                         >

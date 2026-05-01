@@ -64,7 +64,7 @@ export default function Dashboard() {
   const currentStatus = statusConfig[activeStatus] || statusConfig.connecting;
 
   return (
-    <div>
+    <div className= "p-6">
 
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-6 border-b border-slate-200/60 mb-6">

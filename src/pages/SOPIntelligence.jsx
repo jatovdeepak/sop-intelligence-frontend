@@ -38,7 +38,6 @@ import { useSarvamService } from "../services/sarvam_service";
 export default function SOPIntelligence() {
   // --- STATE & REFS ---
   const [userId, setUserId] = useState("");
-  const [embeddingId, setEmbeddingId] = useState("global");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -48,10 +47,6 @@ export default function SOPIntelligence() {
   // Top Menu State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef(null);
-
-  // SOP Fetching State
-  const [availableSops, setAvailableSops] = useState([]);
-  const [fetchingSops, setFetchingSops] = useState(true);
 
   // Sync State
   const [isSyncing, setIsSyncing] = useState(false);
@@ -151,32 +146,11 @@ export default function SOPIntelligence() {
 
     const userRole = sessionStorage.getItem("role");
     setIsAdmin(userRole === "Admin");
-
-    const fetchSOPs = async () => {
-      setFetchingSops(true);
-      try {
-        const token = sessionStorage.getItem("token");
-        const response = await fetch(`${API_BASE_URL}/api/sops`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableSops(data);
-        }
-      } catch (err) {
-        console.error("Error fetching SOPs:", err);
-      } finally {
-        setFetchingSops(false);
-      }
-    };
-
-    fetchSOPs();
   }, [API_BASE_URL]);
 
   useEffect(() => {
-    if (embeddingId) fetchHistory(userId, embeddingId);
-  }, [embeddingId, userId]);
+    if (userId) fetchHistory(userId, "global");
+  }, [userId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -244,7 +218,7 @@ export default function SOPIntelligence() {
   };
 
   const handleClearHistory = async () => {
-    if (!window.confirm("Are you sure you want to clear your personal chat history for this SOP?")) return;
+    if (!window.confirm("Are you sure you want to clear your personal chat history?")) return;
     try {
       await fetch(`${API_RAG_URL}/global-user/clear-history/${userId}`, { method: "POST" });
       setMessages([]);
@@ -255,27 +229,13 @@ export default function SOPIntelligence() {
   };
 
   const handleClearCache = async () => {
-    if (!embeddingId) return;
-    if (embeddingId === "global") {
-      if (!window.confirm("⚠️ WARNING: Are you sure you want to clear ALL verified AI caches across EVERY document? This action cannot be undone.")) return;
-      try {
-        const res = await fetch(`${API_RAG_URL}/admin/clear-cache/global`, { method: "POST" });
-        if (res.ok) alert("All AI caches have been cleared globally.");
-        else alert("Failed to clear caches. You may not have the required permissions.");
-      } catch (err) {
-        console.error("Failed to clear all caches:", err);
-        alert("An error occurred communicating with the server.");
-      }
-      return;
-    }
-
-    if (!window.confirm(`Are you sure you want to clear the AI cache for this document? This removes all verified answers.`)) return;
+    if (!window.confirm("⚠️ WARNING: Are you sure you want to clear ALL verified AI caches across EVERY document? This action cannot be undone.")) return;
     try {
-      const res = await fetch(`${API_RAG_URL}/admin/clear-cache/${embeddingId}`, { method: "POST" });
-      if (res.ok) alert(`Cache cleared successfully.`);
-      else alert("Failed to clear cache. You may not have the required permissions.");
+      const res = await fetch(`${API_RAG_URL}/admin/clear-cache/global`, { method: "POST" });
+      if (res.ok) alert("All AI caches have been cleared globally.");
+      else alert("Failed to clear caches. You may not have the required permissions.");
     } catch (err) {
-      console.error("Failed to clear cache:", err);
+      console.error("Failed to clear all caches:", err);
       alert("An error occurred communicating with the server.");
     }
   };
@@ -399,12 +359,6 @@ export default function SOPIntelligence() {
     const rawInput = queryOverride || question;
     if (!rawInput.trim()) return;
 
-    const currentTarget = targetSopOverride || embeddingId;
-    if (!currentTarget) {
-      alert("Please select an SOP to chat with.");
-      return;
-    }
-
     let englishQuestion = rawInput;
     if (!queryOverride && transcript && rawInput.trim() === transcript.trim() && translation) {
       englishQuestion = translation;
@@ -432,63 +386,55 @@ export default function SOPIntelligence() {
     setApprovingIndex(null);
 
     try {
-      if (currentTarget === "global") {
-        const sopCatalogForLLM = availableSops.map((s) => ({
-          id: s.embeddingId, sopId: s.sopId, title: s.title, type: s.type,
-        }));
+      const res = await fetch(`${API_RAG_URL}/global-api/user/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          question: englishQuestion,
+          available_sops: [],
+          chat_history: chatHistoryPayload,
+          approved_qa_id: approvedQaId,
+          skip_cache: skipCache
+        }),
+      });
 
-        const res = await fetch(`${API_RAG_URL}/global-api/user/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            question: englishQuestion,
-            available_sops: sopCatalogForLLM,
-            chat_history: chatHistoryPayload,
-            approved_qa_id: approvedQaId,
-            skip_cache: skipCache
-          }),
-        });
+      const data = await res.json();
 
-        const data = await res.json();
-
-        if (data.type === "approved_suggestions") {
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                type: "approved_suggestions",
-                content: data.data,
-                approvedOptions: data.approved_options,
-                originalQuestion: englishQuestion
-              }
-            ]);
-            setLoading(false);
-            return;
-        }
-
-        const searchCtx = data.search_context || data.debug_info || null;
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            type: "answer",
-            content: data.data || data.message,
-            originalQuestion: englishQuestion,
-            media: data.media || [],
-            pages: data.page_numbers || [],
-            suggestions: data.suggestions || [], 
-            searchContext: searchCtx,
-            isApproved: data.source === "Expert Approved Answer" 
-          },
-        ]);
-
-        if (searchCtx) setActiveContextData(searchCtx);
-
-        setLoading(false);
-        return;
+      if (data.type === "approved_suggestions") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              type: "approved_suggestions",
+              content: data.data,
+              approvedOptions: data.approved_options,
+              originalQuestion: englishQuestion
+            }
+          ]);
+          setLoading(false);
+          return;
       }
+
+      const searchCtx = data.search_context || data.debug_info || null;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          type: "answer",
+          content: data.data || data.message,
+          originalQuestion: englishQuestion,
+          media: data.media || [],
+          pages: data.page_numbers || [],
+          suggestions: data.suggestions || [], 
+          searchContext: searchCtx,
+          isApproved: data.source === "Expert Approved Answer" 
+        },
+      ]);
+
+      if (searchCtx) setActiveContextData(searchCtx);
+
     } catch (error) {
       console.error("Error:", error);
       setMessages((prev) => [
@@ -509,7 +455,7 @@ export default function SOPIntelligence() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          document_id: embeddingId || "global", 
+          document_id: "global", 
           question: msg.originalQuestion, 
           answer: msg.content, 
           admin_comment: adminComment,
@@ -548,9 +494,7 @@ export default function SOPIntelligence() {
       </div>
       <h2 className="text-xl font-bold text-slate-800 mb-2">How can I help you today?</h2>
       <p className="text-xs text-slate-500 mb-6">
-        {embeddingId === "global"
-          ? "Ask any question and I will automatically route it to the right documentation to get you instant, verified answers."
-          : "Select an SOP from the top menu and ask any question to get instant, verified answers based on our documentation."}
+        Ask any question and I will automatically route it to the right documentation to get you instant, verified answers.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
@@ -583,22 +527,9 @@ export default function SOPIntelligence() {
               <span className="text-xs font-bold text-slate-800 leading-tight">SOP Intelligence</span>
               <div className="flex items-center text-[10px] mt-0.5">
                 <span className="text-slate-500 mr-1.5">Context:</span>
-                <div className="relative inline-flex items-center">
-                  <select
-                    value={embeddingId}
-                    onChange={(e) => setEmbeddingId(e.target.value)}
-                    disabled={fetchingSops}
-                    className="appearance-none bg-slate-100 hover:bg-slate-200 border-none rounded-[4px] py-0.5 pl-1.5 pr-6 outline-none text-slate-700 font-medium cursor-pointer transition-colors max-w-[200px] truncate text-[10px]"
-                  >
-                    <option value="global">🌍 Global AI (Search All)</option>
-                    {availableSops.map((sop) => (
-                      <option key={sop._id || sop.embeddingId} value={sop.embeddingId}>
-                        {sop.sopId} {sop.title ? `- ${sop.title}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
-                </div>
+                <span className="text-[10px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  🌍 Global AI (Search All)
+                </span>
               </div>
             </div>
           </div>
@@ -768,28 +699,16 @@ export default function SOPIntelligence() {
                                 <HelpCircle className="w-4 h-4 text-orange-500" /> {msg.content}
                               </p>
                               <div className="flex flex-col gap-1.5 mt-1">
-                                {msg.suggestions.map((sug, idx) => {
-                                  const matchedSop = availableSops.find((s) => s.sopId === sug || s.embeddingId === sug || s.title === sug);
-                                  return (
-                                    <button
-                                      key={`sug-type-${idx}`}
-                                      onClick={() => handleAsk(sug)}
-                                      disabled={isRagOffline}
-                                      className="text-left px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-2"
-                                    >
-                                      {matchedSop ? <><ArrowRight className="w-3 h-3 text-orange-500" /> {sug}</> : `"${sug}"`}
-                                    </button>
-                                  );
-                                })}
-                                {embeddingId !== "global" && (
+                                {msg.suggestions.map((sug, idx) => (
                                   <button
-                                    onClick={() => handleAsk(msg.originalQuestion, true)}
+                                    key={`sug-type-${idx}`}
+                                    onClick={() => handleAsk(sug)}
                                     disabled={isRagOffline}
-                                    className="flex items-center gap-1.5 text-left px-3 py-2 text-xs border border-transparent rounded-lg hover:bg-slate-100 text-slate-500 transition-colors mt-1 disabled:opacity-50"
+                                    className="text-left px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-2"
                                   >
-                                    <ArrowRight className="w-3 h-3" /> None of these, search anyway.
+                                    <ArrowRight className="w-3 h-3 text-orange-500" /> {sug}
                                   </button>
-                                )}
+                                ))}
                               </div>
                             </div>
                           ) : (
@@ -855,19 +774,16 @@ export default function SOPIntelligence() {
                                 <div className="mt-4 border-t border-slate-100 pt-3">
                                   <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Suggested Follow-ups</p>
                                   <div className="flex flex-wrap gap-2">
-                                    {msg.suggestions.map((sug, idx) => {
-                                      const matchedSop = availableSops.find((s) => s.sopId === sug || s.embeddingId === sug || s.title === sug);
-                                      return (
-                                        <button
-                                          key={`sug-followup-${idx}`}
-                                          onClick={() => handleAsk(sug)}
-                                          disabled={isRagOffline || isSyncing}
-                                          className="text-left px-3 py-1.5 text-xs border border-orange-200 bg-orange-50 text-orange-700 rounded-full hover:bg-orange-500 hover:text-white transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-1.5"
-                                        >
-                                          {matchedSop ? <><ArrowRight className="w-3 h-3" /> {sug}</> : sug}
-                                        </button>
-                                      );
-                                    })}
+                                    {msg.suggestions.map((sug, idx) => (
+                                      <button
+                                        key={`sug-followup-${idx}`}
+                                        onClick={() => handleAsk(sug)}
+                                        disabled={isRagOffline || isSyncing}
+                                        className="text-left px-3 py-1.5 text-xs border border-orange-200 bg-orange-50 text-orange-700 rounded-full hover:bg-orange-500 hover:text-white transition-all shadow-sm disabled:opacity-50 font-medium flex items-center gap-1.5"
+                                      >
+                                        <ArrowRight className="w-3 h-3" /> {sug}
+                                      </button>
+                                    ))}
                                   </div>
                                 </div>
                               )}
@@ -1018,7 +934,7 @@ export default function SOPIntelligence() {
                     )}
                   </div>
 
-                  <textarea ref={textareaRef} value={question} onChange={(e) => { setQuestion(e.target.value); handleTextareaInput(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }} placeholder={isRagOffline ? "Service disconnected..." : isSyncing ? "Syncing database, please wait..." : isRecording ? "Listening in your language..." : `Ask anything about ${embeddingId === "global" ? "all documents" : "the selected SOP"}...`} disabled={loading || isRagOffline || isSyncing} rows={1} className="flex-1 bg-transparent py-1.5 text-[13px] outline-none resize-none overflow-y-auto disabled:cursor-not-allowed max-h-[120px] scrollbar-thin scrollbar-thumb-slate-200" />
+                  <textarea ref={textareaRef} value={question} onChange={(e) => { setQuestion(e.target.value); handleTextareaInput(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }} placeholder={isRagOffline ? "Service disconnected..." : isSyncing ? "Syncing database, please wait..." : isRecording ? "Listening in your language..." : "Ask anything about all documents..."} disabled={loading || isRagOffline || isSyncing} rows={1} className="flex-1 bg-transparent py-1.5 text-[13px] outline-none resize-none overflow-y-auto disabled:cursor-not-allowed max-h-[120px] scrollbar-thin scrollbar-thumb-slate-200" />
                   
                   <div className="flex items-center gap-2 pb-0.5">
                     <button onClick={() => handleAsk()} disabled={loading || !question.trim() || isRagOffline || isSyncing} className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:hover:bg-orange-500 transition-colors shadow-sm shrink-0">

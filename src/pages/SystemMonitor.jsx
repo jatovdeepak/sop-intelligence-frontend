@@ -6,7 +6,7 @@ import StorageServiceMonitor from '../components/StorageServiceMonitor'; // Adju
 
 export default function SystemMonitor() {
   return (
-    <div className="bg-slate-50 min-h-full p-6 space-y-8 rounded-2xl border border-slate-200 shadow-sm">
+    <div className="bg-slate-50 min-h-full p-6 space-y-8  border border-slate-200 shadow-sm">
       
       {/* Page Title */}
       <div className="border-b border-slate-200 pb-4">

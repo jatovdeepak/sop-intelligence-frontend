@@ -27,6 +27,7 @@ import {
   LayoutList,
   Volume2,
   VolumeX,
+  MoreVertical,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -43,6 +44,10 @@ export default function SOPIntelligence() {
   const [loading, setLoading] = useState(false);
   const [activeMedia, setActiveMedia] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
+
+  // Top Menu State
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   // SOP Fetching State
   const [availableSops, setAvailableSops] = useState([]);
@@ -97,6 +102,19 @@ export default function SOPIntelligence() {
     stopTTS,
     isPlayingTTS
   } = useSarvamService();
+
+  // Handle outside click for top options menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Reset the UI icon if the audio finishes playing naturally
   useEffect(() => {
@@ -652,6 +670,7 @@ export default function SOPIntelligence() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* 1. Debug View (Kept outside menu) */}
             <button
               onClick={() => setIsContextPanelOpen(!isContextPanelOpen)}
               className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
@@ -663,61 +682,76 @@ export default function SOPIntelligence() {
               <span className="hidden sm:inline">Debug View</span>
             </button>
 
+            {/* 2. View Approved (Kept outside menu if Admin) */}
             {isAdmin && (
-              <>
-                <button
-                  onClick={handleGlobalSync}
-                  disabled={isSyncing || approvedQaLoading}
-                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin" : ""}`} />
-                  <span className="hidden sm:inline">
-                    {isSyncing ? "Syncing..." : "Sync DB"}
-                  </span>
-                </button>
-
-                <button
-                  onClick={handleSyncApprovedQAs}
-                  disabled={approvedQaLoading}
-                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                >
-                  <CheckCircle className="w-3 h-3" />
-                  <span className="hidden sm:inline">Sync Approved</span>
-                </button>
-
-                <button
-                  onClick={fetchApprovedQAs}
-                  disabled={approvedQaLoading}
-                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-purple-700 bg-purple-50 hover:bg-purple-100"
-                >
-                  <Database className="w-3 h-3" />
-                  <span className="hidden sm:inline">View Approved</span>
-                </button>
-
-                <button
-                  onClick={handleDeleteApprovedQAs}
-                  disabled={approvedQaLoading}
-                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-red-700 bg-red-50 hover:bg-red-100"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span className="hidden sm:inline">Delete Approved</span>
-                </button>
-
-                <button
-                  onClick={handleClearCache}
-                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-slate-600 bg-slate-100 hover:bg-slate-200"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span className="hidden sm:inline">Clear Cache</span>
-                </button>
-              </>
+              <button
+                onClick={fetchApprovedQAs}
+                disabled={approvedQaLoading}
+                className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors"
+              >
+                <Database className="w-3 h-3" />
+                <span className="hidden sm:inline">View Approved</span>
+              </button>
             )}
-            <button
-              onClick={handleClearHistory}
-              className="flex items-center gap-1 text-[11px] font-medium text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md transition-colors"
-            >
-              <Trash2 className="w-3 h-3" /> <span className="hidden sm:inline">Clear Chat</span>
-            </button>
+
+            {/* 3. New Options Dropdown Menu */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setIsMenuOpen((prev) => !prev)}
+                className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                <MoreVertical className="w-3 h-3" />
+                <span className="hidden sm:inline">Options</span>
+              </button>
+
+              {isMenuOpen && (
+                <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-md shadow-lg z-50 flex flex-col py-1 overflow-hidden">
+                  {isAdmin && (
+                    <>
+                      <button
+                        onClick={() => { handleGlobalSync(); setIsMenuOpen(false); }}
+                        disabled={isSyncing || approvedQaLoading}
+                        className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-blue-600 hover:bg-blue-50 text-left w-full transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin" : ""}`} /> Sync DB
+                      </button>
+
+                      <button
+                        onClick={() => { handleSyncApprovedQAs(); setIsMenuOpen(false); }}
+                        disabled={approvedQaLoading}
+                        className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 text-left w-full transition-colors disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-3 h-3" /> Sync Approved
+                      </button>
+
+                      <button
+                        onClick={() => { handleDeleteApprovedQAs(); setIsMenuOpen(false); }}
+                        disabled={approvedQaLoading}
+                        className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-red-700 hover:bg-red-50 text-left w-full transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3 h-3" /> Delete Approved
+                      </button>
+
+                      <button
+                        onClick={() => { handleClearCache(); setIsMenuOpen(false); }}
+                        className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-slate-600 hover:bg-slate-100 text-left w-full transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Clear Cache
+                      </button>
+
+                      <div className="border-t border-slate-100 my-1"></div>
+                    </>
+                  )}
+                  
+                  <button
+                    onClick={() => { handleClearHistory(); setIsMenuOpen(false); }}
+                    className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-red-600 hover:bg-red-50 text-left w-full transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Clear Chat
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 

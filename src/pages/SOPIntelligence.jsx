@@ -428,7 +428,8 @@ export default function SOPIntelligence() {
             question: englishQuestion,
             available_sops: sopCatalogForLLM,
             chat_history: chatHistoryPayload,
-            approved_qa_id: approvedQaId 
+            approved_qa_id: approvedQaId,
+            skip_cache: skipCache
           }),
         });
 

@@ -524,13 +524,13 @@ export default function SOPIntelligence() {
               <MessageSquare className="w-4 h-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-slate-800 leading-tight">SOP Intelligence</span>
-              <div className="flex items-center text-[10px] mt-0.5">
+              <span className="text-s font-bold text-slate-800 leading-tight">SOP Intelligence</span>
+              {/* <div className="flex items-center text-[10px] mt-0.5">
                 <span className="text-slate-500 mr-1.5">Context:</span>
                 <span className="text-[10px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                   🌍 Global AI (Search All)
                 </span>
-              </div>
+              </div> */}
             </div>
           </div>
 

@@ -1,0 +1,16 @@
+# Drop this file into any repo at .github/workflows/quality.yml
+name: Quality
+on:
+  pull_request:
+  push:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    uses: Arizonsystems/eyeonthesky/.github/workflows/reusable-quality.yml@main
+    with:
+      project-key: ${{ github.event.repository.name }}
+      enable-ai-review: true
+      fail-on-quality-gate: true
+    secrets: inherit

@@ -10,7 +10,6 @@ import {
   Check,
   Play,
   ThumbsUp,
-  ChevronDown,
   RefreshCw,
   MessageSquare,
   AlertCircle,
@@ -74,13 +73,12 @@ export default function SOPIntelligence() {
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // ... existing state ...
   const [syncProgress, setSyncProgress] = useState({
     current: 0,
     total: 0,
     failed: 0,
   });
-  const syncIntervalRef = useRef(null); // To clear interval safely
+  const syncIntervalRef = useRef(null);
 
   // Service Status
   const { rag } = useServiceStatus();
@@ -126,7 +124,7 @@ export default function SOPIntelligence() {
     if (!isPlayingTTS) setActiveTTSIndex(null);
   }, [isPlayingTTS]);
 
-  // Strip Markdown syntax before sending to Sarvam so it doesn't read asterisks out loud
+  // Strip Markdown syntax before sending to Sarvam
   const handleTTS = (rawText, index) => {
     if (isPlayingTTS && activeTTSIndex === index) {
       stopTTS();
@@ -156,6 +154,12 @@ export default function SOPIntelligence() {
 
     const userRole = sessionStorage.getItem("role");
     setIsAdmin(userRole === "Admin");
+
+    // FIX 1: Restore interrupted question if user refreshed while waiting for an answer
+    const pending = sessionStorage.getItem("sop_pending_question");
+    if (pending) {
+      setQuestion(pending);
+    }
   }, [API_BASE_URL]);
 
   useEffect(() => {
@@ -196,11 +200,12 @@ export default function SOPIntelligence() {
         data.forEach((item) => {
           historyMessages.push({ role: "user", content: item.question });
 
-          if (item.answer) {
+          // FIX 2: Safely check for answer to prevent dropping empty responses
+          if (item.answer !== undefined && item.answer !== null) {
             historyMessages.push({
               role: "assistant",
               type: "answer",
-              content: item.answer,
+              content: item.answer || "No response recorded.",
               source: item.source,
               isApproved: item.is_approved,
               adminComment: item.admin_comment,
@@ -222,6 +227,13 @@ export default function SOPIntelligence() {
           }
         });
         setMessages(historyMessages);
+
+        // FIX 3: If the DB successfully saved the interrupted question, clear it from input
+        const pending = sessionStorage.getItem("sop_pending_question");
+        if (pending && data[data.length - 1].question === pending) {
+          setQuestion("");
+          sessionStorage.removeItem("sop_pending_question");
+        }
       } else {
         setMessages([]);
       }
@@ -291,7 +303,6 @@ export default function SOPIntelligence() {
       if (!response.ok) throw new Error("Failed to trigger sync.");
 
       const data = await response.json();
-      // data.total comes from your res.status(202).json({ total: totalToEmbed })
       const initialTotal = data.total || 0;
       setSyncProgress((prev) => ({ ...prev, total: initialTotal }));
 
@@ -307,9 +318,6 @@ export default function SOPIntelligence() {
             }
           );
           const stats = await statusRes.json();
-
-          // current = total - remaining pending
-          // (Note: stats.pending comes from your getSyncProgress endpoint)
           const completedSoFar = initialTotal - stats.pending;
 
           setSyncProgress({
@@ -347,7 +355,6 @@ export default function SOPIntelligence() {
     }
   };
 
-  // Cleanup interval on unmount
   useEffect(() => {
     return () => {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
@@ -453,16 +460,41 @@ export default function SOPIntelligence() {
       englishQuestion = translation;
     }
 
-    const chatHistoryPayload = messages
-      .filter(
-        (msg) =>
-          msg.role === "user" ||
-          (msg.role === "assistant" && msg.type === "answer")
-      )
-      .map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+    // FIX 4: Strict Alternating History prevents LLM 400 Bad Request Crashes
+    const chatHistoryPayload = [];
+    let lastRole = null;
+
+    messages.forEach((msg) => {
+      // Ignore errors when assembling history
+      if (
+        msg.role === "user" ||
+        (msg.role === "assistant" &&
+          msg.type === "answer" &&
+          !msg.content.includes("❌"))
+      ) {
+        if (msg.role === "user") {
+          if (lastRole === "user") {
+            // Two user messages in a row (caused by interrupts) -> overwrite the last one
+            chatHistoryPayload[chatHistoryPayload.length - 1] = {
+              role: "user",
+              content: msg.content,
+            };
+          } else {
+            chatHistoryPayload.push({ role: "user", content: msg.content });
+            lastRole = "user";
+          }
+        } else if (msg.role === "assistant" && lastRole === "user") {
+          chatHistoryPayload.push({
+            role: "assistant",
+            content: msg.content,
+          });
+          lastRole = "assistant";
+        }
+      }
+    });
+
+    // Save pending question so it survives a page refresh
+    sessionStorage.setItem("sop_pending_question", rawInput);
 
     const displayQuestion = skipCache
       ? `Search anyway: "${rawInput}"`
@@ -510,7 +542,6 @@ export default function SOPIntelligence() {
             originalQuestion: englishQuestion,
           },
         ]);
-        setLoading(false);
         return;
       }
 
@@ -544,6 +575,8 @@ export default function SOPIntelligence() {
       ]);
     } finally {
       setLoading(false);
+      // Clean up the temporary save since request completed
+      sessionStorage.removeItem("sop_pending_question");
     }
   };
 
@@ -645,12 +678,6 @@ export default function SOPIntelligence() {
               <span className="text-s font-bold text-slate-800 leading-tight">
                 SOP Intelligence
               </span>
-              {/* <div className="flex items-center text-[10px] mt-0.5">
-                <span className="text-slate-500 mr-1.5">Context:</span>
-                <span className="text-[10px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                  🌍 Global AI (Search All)
-                </span>
-              </div> */}
             </div>
           </div>
 

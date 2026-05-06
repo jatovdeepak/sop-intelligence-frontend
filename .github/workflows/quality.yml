@@ -8,7 +8,7 @@ on:
 
 jobs:
   quality:
-    uses: Arizonsystems/eyeonthesky/.github/workflows/reusable-quality.yml@main
+    uses: Arizon-Systems/eyeonthesky/.github/workflows/reusable-quality.yml@main
     with:
       project-key: ${{ github.event.repository.name }}
       enable-ai-review: true

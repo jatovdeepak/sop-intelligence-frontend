@@ -59,7 +59,7 @@ export default function Login() {
       
         sessionStorage.setItem(
           "system",
-          "SOP Intelligence"
+          "SOP_Intelligence"
         );
       
         sessionStorage.setItem(

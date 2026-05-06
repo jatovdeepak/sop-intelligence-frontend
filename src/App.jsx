@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { ServiceStatusProvider } from './context/ServiceStatusContext';
+import { ServiceStatusProvider } from "./context/ServiceStatusContext";
 import SessionTimeout from "./components/SessionTimeout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
@@ -11,9 +11,10 @@ import Settings from "./pages/Settings";
 import SOPIntelligence from "./pages/SOPIntelligence";
 import Login from "./pages/Login";
 import SystemMonitor from "./pages/SystemMonitor";
+import SsoLogin from "./pages/SsoLogin";
 
 // Optional: Import your global alert component if you created it
-// import GlobalServiceAlert from "./components/GlobalServiceAlert"; 
+// import GlobalServiceAlert from "./components/GlobalServiceAlert";
 
 // Protect routes
 const ProtectedRoute = ({ children }) => {
@@ -41,6 +42,7 @@ export default function App() {
 
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/sso-login" element={<SsoLogin />} />
 
           <Route
             element={
@@ -57,6 +59,7 @@ export default function App() {
             <Route path="/sop-intelligence" element={<SOPIntelligence />} />
             <Route path="/account" element={<Account />} />
             <Route path="/settings" element={<Settings />} />
+            
           </Route>
         </Routes>
       </BrowserRouter>

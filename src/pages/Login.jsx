@@ -25,18 +25,58 @@ export default function Login() {
       const data = await response.json();
 
       if (response.ok) {
-        // Store JWT and role in sessionStorage
-        sessionStorage.setItem("token", data.token);
-        sessionStorage.setItem("role", data.role);
-        sessionStorage.setItem("sop_user_id", data.userid);
-        window.dispatchEvent(new Event("tokenUpdated"));
 
-        navigate("/"); // Redirect to dashboard
+        /*
+          Auth token
+        */
+      
+        sessionStorage.setItem(
+          "token",
+          data.token
+        );
+      
+        /*
+          Internal RBAC role
+        */
+      
+        sessionStorage.setItem(
+          "role",
+          data.role
+        );
+      
+        /*
+          Human-readable role
+        */
+      
+        sessionStorage.setItem(
+          "roleLabel",
+          data.role
+        );
+      
+        /*
+          Source system
+        */
+      
+        sessionStorage.setItem(
+          "system",
+          "SOP Intelligence"
+        );
+      
+        sessionStorage.setItem(
+          "sop_user_id",
+          data.userid
+        );
+      
+        window.dispatchEvent(
+          new Event("tokenUpdated")
+        );
+      
+        navigate("/");
       } else {
         setError(data.message || "Invalid credentials");
       }
     } catch (err) {
-      setError("Server error. Please try again.");
+      setError("Server error. Please try again." , err);
     }
   };
 
